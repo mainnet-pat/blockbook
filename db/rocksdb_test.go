@@ -1170,6 +1170,11 @@ func Test_packTxAddresses_unpackTxAddresses(t *testing.T) {
 
 func Test_packAddrBalance_unpackAddrBalance(t *testing.T) {
 	parser := bitcoinTestnetParser()
+	d := setupRocksDB(t, &testBitcoinParser{
+		BitcoinParser: parser,
+	})
+	defer closeAndDestroyRocksDB(t, d)
+
 	tests := []struct {
 		name string
 		hex  string
@@ -1226,12 +1231,12 @@ func Test_packAddrBalance_unpackAddrBalance(t *testing.T) {
 	buf := make([]byte, 32)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			b := packAddrBalance(tt.data, buf, varBuf)
+			b := d.packAddrBalance(tt.data, buf, varBuf)
 			hex := hex.EncodeToString(b)
 			if !reflect.DeepEqual(hex, tt.hex) {
 				t.Errorf("packTxAddresses() = %v, want %v", hex, tt.hex)
 			}
-			got1, err := unpackAddrBalance(b, parser.PackedTxidLen(), AddressBalanceDetailUTXO)
+			got1, err := d.unpackAddrBalance(b, parser.PackedTxidLen(), AddressBalanceDetailUTXO)
 			if err != nil {
 				t.Errorf("unpackTxAddresses() error = %v", err)
 				return

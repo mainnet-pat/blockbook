@@ -1,8 +1,13 @@
 package bchain
 
-import "math/big"
-
 type BcashNFTCapabilityType uint8
+
+const (
+	PREFIX_TOKEN       = 0xef
+	HAS_COMMITMENT_LEN = 0x40
+	HAS_NFT            = 0x20
+	HAS_AMOUNT         = 0x10
+)
 
 const (
 	NFTCapabilityNone    BcashNFTCapabilityType = 0
@@ -11,6 +16,20 @@ const (
 )
 
 type BcashNFTCapabilityLabel string
+
+// NFTCapabilityLabelToNumber maps a BcashNFTCapabilityLabel to its corresponding BcashNFTCapabilityType number.
+func NFTCapabilityLabelToNumber(label BcashNFTCapabilityLabel) BcashNFTCapabilityType {
+	switch label {
+	case NFTCapabilityLabelNone:
+		return NFTCapabilityNone
+	case NFTCapabilityLabelMutable:
+		return NFTCapabilityMutable
+	case NFTCapabilityLabelMinting:
+		return NFTCapabilityMinting
+	default:
+		return NFTCapabilityNone
+	}
+}
 
 const (
 	NFTCapabilityLabelNone    BcashNFTCapabilityLabel = "none"
@@ -54,12 +73,12 @@ type BcashTokenNft struct {
 // BcashToken represents a CashToken in a BitcoinCash transaction
 type BcashToken struct {
 	Category string         `json:"category" ts_doc:"Identifier of the token, which is a 32-byte hash of its genesis transaction"`
-	Amount   big.Int        `json:"amount" ts_doc:"Fungible token amount in base units"`
+	Amount   string         `json:"amount" ts_doc:"Fungible token amount in base units"`
 	Nft      *BcashTokenNft `json:"nft,omitempty" ts_doc:"Optional pointer to a BcashTokenNft object if the token also holds an NFT"`
 }
 
-// BcashSpecific contains data specific to BitcoinCash transactions
-type BcashSpecific struct {
-	TokenVins  []*BcashToken `json:"tokenVins,omitempty" ts_doc:"Array of pointers to BcashToken objects or nil if there are no tokens at the corresponding vin"`
-	TokenVouts []*BcashToken `json:"tokenVouts,omitempty" ts_doc:"Array of pointers to BcashToken objects or nil if there are no tokens at the corresponding vout"`
-}
+// // BcashSpecific contains data specific to BitcoinCash transactions
+// type BcashSpecific struct {
+// 	TokenVins  []*BcashToken `json:"tokenVins,omitempty" ts_doc:"Array of pointers to BcashToken objects or nil if there are no tokens at the corresponding vin"`
+// 	TokenVouts []*BcashToken `json:"tokenVouts,omitempty" ts_doc:"Array of pointers to BcashToken objects or nil if there are no tokens at the corresponding vout"`
+// }

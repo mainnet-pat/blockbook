@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
-	"math/big"
+	"strconv"
 
 	"github.com/martinboehm/bchutil"
 	"github.com/martinboehm/btcd/wire"
@@ -206,21 +206,25 @@ func (p *BCashParser) outputScriptToAddresses(script []byte) ([]string, bool, er
 	return []string{addr}, len(addr) > 0, nil
 }
 
+func (p *BCashParser) ParseTokenData(script []byte) (*bchain.BcashToken, int, error) {
+	return UnpackTokenData(script)
+}
+
 // https://github.com/bitjson/cashtokens/blob/1d3745e04b2c454f7a194d9fab368df72e8adc69/readme.md#token-encoding
 // https://github.com/bitauth/libauth/blob/60aec239cc2d57ae21d0069c5bbafb346abc9b66/src/lib/message/transaction-encoding.ts#L223
-func (p *BCashParser) ParseTokenData(script []byte) (*bchain.BcashToken, int, error) {
-	if len(script) == 0 {
+func UnpackTokenData(buf []byte) (*bchain.BcashToken, int, error) {
+	if len(buf) == 0 {
 		return nil, 0, nil
 	}
 
-	br := bytes.NewReader(script)
+	br := bytes.NewReader(buf)
 
-	// Check for prefix 0xef
+	// Check for prefix PREFIX_TOKEN
 	b, err := br.ReadByte()
 	if err != nil {
 		return nil, 0, err
 	}
-	if b != 0xef {
+	if b != bchain.PREFIX_TOKEN {
 		return nil, 0, nil // Not a token prefix
 	}
 
@@ -253,9 +257,9 @@ func (p *BCashParser) ParseTokenData(script []byte) (*bchain.BcashToken, int, er
 	if reserved != 0 {
 		return nil, 0, fmt.Errorf("Invalid token prefix: reserved bit is set. Bitfield: 0b%08b", bitfield)
 	}
-	hasCommitmentLength := prefixStructure & 0x40
-	hasNFT := prefixStructure & 0x20
-	hasAmount := prefixStructure & 0x10
+	hasCommitmentLength := prefixStructure & bchain.HAS_COMMITMENT_LEN
+	hasNFT := prefixStructure & bchain.HAS_NFT
+	hasAmount := prefixStructure & bchain.HAS_AMOUNT
 
 	NFTCapability := bchain.BcashNFTCapabilityType(bitfield & 0x0f)
 
@@ -311,15 +315,81 @@ func (p *BCashParser) ParseTokenData(script []byte) (*bchain.BcashToken, int, er
 		if ftAmount > 9223372036854775807 {
 			return nil, 0, fmt.Errorf("Invalid token prefix: exceeds maximum fungible token amount of 9223372036854775807. Encoded amount: %d", ftAmount)
 		}
-		token.Amount = *big.NewInt(int64(ftAmount))
+		token.Amount = strconv.FormatUint(ftAmount, 10)
 	} else {
-		token.Amount = *big.NewInt(0)
+		token.Amount = "0"
 	}
 
 	return token, int(br.Size()) - br.Len(), nil
 }
 
-// BcashTypePostProcessApiTx is unsupported
-func (b *BCashParser) BcashTypeParseTokenData(addrDesc bchain.AddressDescriptor) (*bchain.BcashToken, int, error) {
-	return b.ParseTokenData(addrDesc)
+func PackTokenData(token *bchain.BcashToken) []byte {
+	if token == nil || (token.Nft == nil && token.Amount == "0") {
+		return []byte{}
+	}
+
+	var result []byte
+	result = append(result, bchain.PREFIX_TOKEN)
+
+	// category: hex string, needs to be reversed
+	categoryBytes, err := hex.DecodeString(token.Category)
+	if err != nil || len(categoryBytes) != 32 {
+		return []byte{}
+	}
+	// reverse categoryBytes
+	for i, j := 0, len(categoryBytes)-1; i < j; i, j = i+1, j-1 {
+		categoryBytes[i], categoryBytes[j] = categoryBytes[j], categoryBytes[i]
+	}
+	result = append(result, categoryBytes...)
+
+	var tokenBitfield byte = 0
+	var commitmentBytes []byte
+	if token.Nft != nil {
+		tokenBitfield |= bchain.HAS_NFT
+		capabilityInt := bchain.NFTCapabilityLabelToNumber(token.Nft.Capability)
+		tokenBitfield |= byte(capabilityInt)
+		if len(token.Nft.Commitment) > 0 {
+			tokenBitfield |= bchain.HAS_COMMITMENT_LEN
+			commitmentBytes, _ = hex.DecodeString(token.Nft.Commitment)
+		}
+	}
+	if token.Amount != "0" && token.Amount != "" {
+		tokenBitfield |= bchain.HAS_AMOUNT
+	}
+	result = append(result, tokenBitfield)
+
+	// Commitment length and bytes
+	if tokenBitfield&bchain.HAS_COMMITMENT_LEN != 0 {
+		commitmentLen := uint64(len(commitmentBytes))
+		var buf bytes.Buffer
+		_ = wire.WriteVarInt(&buf, 0, commitmentLen)
+		result = append(result, buf.Bytes()...)
+		result = append(result, commitmentBytes...)
+	}
+
+	// Amount
+	if tokenBitfield&bchain.HAS_AMOUNT != 0 {
+		amount, _ := strconv.ParseUint(token.Amount, 10, 64)
+		var buf bytes.Buffer
+		_ = wire.WriteVarInt(&buf, 0, amount)
+		result = append(result, buf.Bytes()...)
+	}
+
+	return result
+}
+
+func GetAddressesAndTokenFromVout(parser bchain.BlockChainParser, vout *bchain.Vout) (bchain.AddressDescriptor, []string, bool, *bchain.BcashToken, error) {
+	script, err := hex.DecodeString(vout.ScriptPubKey.Hex)
+	if err != nil {
+		return nil, nil, false, nil, err
+	}
+	token, pkScriptStart, err := UnpackTokenData(script)
+	if err != nil {
+		return nil, nil, false, nil, err
+	}
+
+	addrDesc := script[pkScriptStart:]
+	a, s, err := parser.GetAddressesFromAddrDesc(addrDesc)
+
+	return addrDesc, a, s, token, err
 }

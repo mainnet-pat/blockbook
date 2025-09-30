@@ -707,12 +707,12 @@ func tokenCategory2HueSaturation(category string) string {
 
 func (s *PublicServer) bcashToken(td *TemplateData, input bool, n int) template.HTML {
 	var rv strings.Builder
-	if td.Tx.BcashSpecific != nil {
+	if td.Tx != nil {
 		var tokens []*bchain.BcashToken
 		if input {
-			tokens = td.Tx.BcashSpecific.TokenVins
+			// tokens = td.Tx.BcashSpecific.TokenVins
 		} else {
-			tokens = td.Tx.BcashSpecific.TokenVouts
+			// tokens = td.Tx.BcashSpecific.TokenVouts
 		}
 
 		if n >= 0 && n < len(tokens) {
@@ -729,7 +729,7 @@ func (s *PublicServer) bcashToken(td *TemplateData, input bool, n int) template.
 				// token category and amount
 				rv.WriteString(`<div class="flex">`)
 
-				hasAmount := t.Amount.Cmp(big.NewInt(0)) > 0
+				hasAmount := t.Amount != "0"
 
 				rv.WriteString(`<div class="ellipsis copyable flex-1`)
 				rv.WriteString(`" cc="`)
@@ -740,7 +740,7 @@ func (s *PublicServer) bcashToken(td *TemplateData, input bool, n int) template.
 
 				rv.WriteString(`<div class="flex flex-1 w-half float-align-right justify-end" title="Token Amount">`)
 				if hasAmount {
-					rv.WriteString(t.Amount.String())
+					rv.WriteString(t.Amount)
 				}
 				rv.WriteString(`</div>`)
 				rv.WriteString(`</div>`)
