@@ -667,6 +667,7 @@ func (d *RocksDB) processAddressesBitcoinType(block *bchain.Block, addresses add
 				gf.AddAddrDesc(addrDesc, tx)
 			}
 			tao.AddrDesc = addrDesc
+			tao.BcashToken = bcashToken
 			if d.chainParser.IsAddrDescIndexable(addrDesc) {
 				strAddrDesc := string(addrDesc)
 				balance, e := balances[strAddrDesc]
@@ -692,6 +693,9 @@ func (d *RocksDB) processAddressesBitcoinType(block *bchain.Block, addresses add
 					BcashToken: bcashToken,
 				})
 				counted := addToAddressesMap(addresses, strAddrDesc, btxID, int32(i))
+				if tao.BcashToken != nil {
+					addToAddressesMap(addresses, tao.BcashToken.Category, btxID, int32(i))
+				}
 				if !counted {
 					balance.Txs++
 				}
@@ -780,6 +784,9 @@ func (d *RocksDB) processAddressesBitcoinType(block *bchain.Block, addresses add
 					d.cbs.balancesHit++
 				}
 				counted := addToAddressesMap(addresses, strAddrDesc, spendingTxid, ^int32(i))
+				if tai.BcashToken != nil {
+					addToAddressesMap(addresses, tai.BcashToken.Category, spendingTxid, ^int32(i))
+				}
 				if !counted {
 					balance.Txs++
 				}
