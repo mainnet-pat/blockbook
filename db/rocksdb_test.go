@@ -1184,7 +1184,7 @@ func Test_packTxAddresses_unpackTxAddresses(t *testing.T) {
 						AddrDesc: addressToAddrDesc("tb1q233n429a9e2jh48gnsq7w0qm0yz7kkzx0qczw8", parser),
 						ValueSat: *big.NewInt(1234123421342341234),
 						BcashToken: &bchain.BcashToken{
-							Amount:   "4294967296",
+							Amount:   (common.Amount)(*big.NewInt(4294967296)),
 							Category: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 							Nft: &bchain.BcashTokenNft{
 								Commitment: "cc",
@@ -1199,7 +1199,7 @@ func Test_packTxAddresses_unpackTxAddresses(t *testing.T) {
 						ValueSat: *big.NewInt(1),
 						Spent:    true,
 						BcashToken: &bchain.BcashToken{
-							Amount:   "1",
+							Amount:   (common.Amount)(*big.NewInt(1)),
 							Category: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 							Nft: &bchain.BcashTokenNft{
 								Commitment: "cccc",
@@ -1236,7 +1236,7 @@ func Test_packTxAddresses_unpackTxAddresses(t *testing.T) {
 						Txid:     "ed308c72f9804dfeefdbb483ef8fd1e638180ad81d6b33f4b58d36d19162fa6d",
 						Vout:     134,
 						BcashToken: &bchain.BcashToken{
-							Amount:   "4294967296",
+							Amount:   (common.Amount)(*big.NewInt(4294967296)),
 							Category: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 							Nft: &bchain.BcashTokenNft{
 								Commitment: "cc",
@@ -1278,7 +1278,7 @@ func Test_packTxAddresses_unpackTxAddresses(t *testing.T) {
 						SpentIndex:  674541,
 						SpentHeight: 6666666,
 						BcashToken: &bchain.BcashToken{
-							Amount:   "1",
+							Amount:   (common.Amount)(*big.NewInt(1)),
 							Category: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 							Nft: &bchain.BcashTokenNft{
 								Commitment: "cccc",
@@ -1438,7 +1438,7 @@ func Test_packAddrBalance_unpackAddrBalance_Bcash(t *testing.T) {
 						Height:   1234567890,
 						ValueSat: *big.NewInt(9123372036854775807),
 						BcashToken: &bchain.BcashToken{
-							Amount:   "4294967296",
+							Amount:   (common.Amount)(*big.NewInt(4294967296)),
 							Category: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 							Nft: &bchain.BcashTokenNft{
 								Commitment: "cc",
@@ -1574,7 +1574,7 @@ func TestAddrBalance_utxo_methods(t *testing.T) {
 		Height:   5000,
 		ValueSat: *big.NewInt(100),
 		BcashToken: &bchain.BcashToken{
-			Amount:   "4294967296",
+			Amount:   (common.Amount)(*big.NewInt(4294967296)),
 			Category: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 			Nft: &bchain.BcashTokenNft{
 				Commitment: "cc",
@@ -1593,7 +1593,7 @@ func TestAddrBalance_utxo_methods(t *testing.T) {
 				Height:   5000,
 				ValueSat: *big.NewInt(100),
 				BcashToken: &bchain.BcashToken{
-					Amount:   "4294967296",
+					Amount:   (common.Amount)(*big.NewInt(4294967296)),
 					Category: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
 					Nft: &bchain.BcashTokenNft{
 						Commitment: "cc",

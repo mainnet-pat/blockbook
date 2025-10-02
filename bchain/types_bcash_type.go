@@ -1,5 +1,7 @@
 package bchain
 
+import "github.com/trezor/blockbook/common"
+
 type BcashNFTCapabilityType uint8
 
 const (
@@ -73,6 +75,6 @@ type BcashTokenNft struct {
 // BcashToken represents a CashToken in a BitcoinCash transaction
 type BcashToken struct {
 	Category string         `json:"category" ts_doc:"Identifier of the token, which is a 32-byte hash of its genesis transaction"`
-	Amount   string         `json:"amount" ts_doc:"Fungible token amount in base units"`
+	Amount   common.Amount  `json:"amount" ts_doc:"Fungible token amount in base units"`
 	Nft      *BcashTokenNft `json:"nft,omitempty" ts_doc:"Optional pointer to a BcashTokenNft object if the token also holds an NFT"`
 }

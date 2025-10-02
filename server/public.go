@@ -719,7 +719,7 @@ func (s *PublicServer) bcashToken(token *bchain.BcashToken) template.HTML {
 		// token category and amount
 		rv.WriteString(`<div class="flex">`)
 
-		hasAmount := token.Amount != "0"
+		hasAmount := token.Amount.AsInt64() != 0
 
 		rv.WriteString(`<div class="ellipsis copyable flex-1`)
 		rv.WriteString(`" cc="`)
@@ -730,7 +730,7 @@ func (s *PublicServer) bcashToken(token *bchain.BcashToken) template.HTML {
 
 		rv.WriteString(`<div class="flex flex-1 w-half float-align-right justify-end" title="Token Amount">`)
 		if hasAmount {
-			rv.WriteString(token.Amount)
+			rv.WriteString(token.Amount.String())
 		}
 		rv.WriteString(`</div>`)
 		rv.WriteString(`</div>`)

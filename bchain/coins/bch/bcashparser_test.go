@@ -15,6 +15,7 @@ import (
 	"github.com/martinboehm/btcutil/chaincfg"
 	"github.com/trezor/blockbook/bchain"
 	"github.com/trezor/blockbook/bchain/coins/btc"
+	"github.com/trezor/blockbook/common"
 )
 
 func TestMain(m *testing.M) {
@@ -763,7 +764,7 @@ func Test_UnpackTx(t *testing.T) {
 			wantTokens: []*bchain.BcashToken{
 				{
 					Category: "5e437326449aba7855da3f5922fd65cfee6eab17c6869e0636016300b0f1c3c1",
-					Amount:   "0",
+					Amount:   (common.Amount)(*big.NewInt(0)),
 					Nft: &bchain.BcashTokenNft{
 						Capability: bchain.BcashNFTCapabilityLabel("none"),
 						Commitment: "",
@@ -771,7 +772,7 @@ func Test_UnpackTx(t *testing.T) {
 				},
 				{
 					Category: "d0d46f5cbd82188acede0d3e49c75700c19cb8331a30101f0bb6a260066ac972",
-					Amount:   "0",
+					Amount:   (common.Amount)(*big.NewInt(0)),
 					Nft: &bchain.BcashTokenNft{
 						Capability: bchain.BcashNFTCapabilityLabel("mutable"),
 						Commitment: "15ac95680000e803a037130053e10000",
@@ -792,7 +793,7 @@ func Test_UnpackTx(t *testing.T) {
 			wantTokens: []*bchain.BcashToken{
 				{
 					Category: "b38a33f750f84c5c169a6f23cb873e6e79605021585d4f3408789689ed87f366",
-					Amount:   "4503599605433096",
+					Amount:   (common.Amount)(*big.NewInt(4503599605433096)),
 					Nft: &bchain.BcashTokenNft{
 						Capability: bchain.BcashNFTCapabilityLabel("minting"),
 						Commitment: "f13913",
@@ -800,7 +801,7 @@ func Test_UnpackTx(t *testing.T) {
 				},
 				{
 					Category: "d0d46f5cbd82188acede0d3e49c75700c19cb8331a30101f0bb6a260066ac972",
-					Amount:   "0",
+					Amount:   (common.Amount)(*big.NewInt(0)),
 					Nft: &bchain.BcashTokenNft{
 						Capability: bchain.BcashNFTCapabilityLabel("mutable"),
 						Commitment: "1b3796680000e803f139130035e40000",
@@ -808,7 +809,7 @@ func Test_UnpackTx(t *testing.T) {
 				},
 				{
 					Category: "b38a33f750f84c5c169a6f23cb873e6e79605021585d4f3408789689ed87f366",
-					Amount:   "0",
+					Amount:   (common.Amount)(*big.NewInt(0)),
 					Nft: &bchain.BcashTokenNft{
 						Capability: bchain.BcashNFTCapabilityLabel("none"),
 						Commitment: "fef765e9999e6248699a45a68847c06e7d5cb36f49f42e554995a6ec1720ffbbe02e81011b379668",
@@ -816,12 +817,12 @@ func Test_UnpackTx(t *testing.T) {
 				},
 				{
 					Category: "b38a33f750f84c5c169a6f23cb873e6e79605021585d4f3408789689ed87f366",
-					Amount:   "1200000",
+					Amount:   (common.Amount)(*big.NewInt(1200000)),
 				},
 				nil,
 				{
 					Category: "9c8362ec067e2d516064b6184b6ef0c9a6e5daa7dfb4693e9764de48460b3d9b",
-					Amount:   "0",
+					Amount:   (common.Amount)(*big.NewInt(0)),
 					Nft: &bchain.BcashTokenNft{
 						Capability: bchain.BcashNFTCapabilityLabel("minting"),
 						Commitment: "dc02",
@@ -829,7 +830,7 @@ func Test_UnpackTx(t *testing.T) {
 				},
 				{
 					Category: "9c8362ec067e2d516064b6184b6ef0c9a6e5daa7dfb4693e9764de48460b3d9b",
-					Amount:   "0",
+					Amount:   (common.Amount)(*big.NewInt(0)),
 					Nft: &bchain.BcashTokenNft{
 						Capability: bchain.BcashNFTCapabilityLabel("none"),
 						Commitment: "db02",
@@ -931,8 +932,8 @@ func Test_ValidTokenPrefixes(t *testing.T) {
 			t.Fatalf("token is nil")
 		}
 
-		if token.Amount != amount {
-			t.Errorf("amount: got %s, want %s", token.Amount, amount)
+		if token.Amount.String() != amount {
+			t.Errorf("amount: got %s, want %s", token.Amount.String(), amount)
 		}
 		if token.Category != category {
 			t.Errorf("category: got %s, want %s", token.Category, category)

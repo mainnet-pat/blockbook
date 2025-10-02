@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
-	"strconv"
+	"math/big"
 
 	"github.com/martinboehm/bchutil"
 	"github.com/martinboehm/btcd/wire"
@@ -14,6 +14,7 @@ import (
 	"github.com/schancel/cashaddr-converter/address"
 	"github.com/trezor/blockbook/bchain"
 	"github.com/trezor/blockbook/bchain/coins/btc"
+	"github.com/trezor/blockbook/common"
 )
 
 // AddressFormat type is used to specify different formats of address
@@ -332,16 +333,16 @@ func UnpackTokenData(buf []byte) (*bchain.BcashToken, int, error) {
 		if ftAmount > 9223372036854775807 {
 			return nil, 0, fmt.Errorf("Invalid token prefix: exceeds maximum fungible token amount of 9223372036854775807. Encoded amount: %d", ftAmount)
 		}
-		token.Amount = strconv.FormatUint(ftAmount, 10)
+		token.Amount = (common.Amount)(*big.NewInt(int64(ftAmount)))
 	} else {
-		token.Amount = "0"
+		token.Amount = (common.Amount)(*big.NewInt(0))
 	}
 
 	return token, int(br.Size()) - br.Len(), nil
 }
 
 func PackTokenData(token *bchain.BcashToken) []byte {
-	if token == nil || (token.Nft == nil && token.Amount == "0") {
+	if token == nil || (token.Nft == nil && token.Amount.AsInt64() == 0) {
 		return []byte{}
 	}
 
@@ -370,7 +371,7 @@ func PackTokenData(token *bchain.BcashToken) []byte {
 			commitmentBytes, _ = hex.DecodeString(token.Nft.Commitment)
 		}
 	}
-	if token.Amount != "0" && token.Amount != "" {
+	if token.Amount.AsInt64() != 0 {
 		tokenBitfield |= bchain.HAS_AMOUNT
 	}
 	result = append(result, tokenBitfield)
@@ -386,9 +387,8 @@ func PackTokenData(token *bchain.BcashToken) []byte {
 
 	// Amount
 	if tokenBitfield&bchain.HAS_AMOUNT != 0 {
-		amount, _ := strconv.ParseUint(token.Amount, 10, 64)
 		var buf bytes.Buffer
-		_ = wire.WriteVarInt(&buf, 0, amount)
+		_ = wire.WriteVarInt(&buf, 0, uint64(token.Amount.AsInt64()))
 		result = append(result, buf.Bytes()...)
 	}
 
