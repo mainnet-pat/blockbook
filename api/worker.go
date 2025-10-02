@@ -16,6 +16,7 @@ import (
 	"github.com/golang/glog"
 	"github.com/juju/errors"
 	"github.com/trezor/blockbook/bchain"
+	"github.com/trezor/blockbook/bchain/coins/bch"
 	"github.com/trezor/blockbook/bchain/coins/eth"
 	"github.com/trezor/blockbook/common"
 	"github.com/trezor/blockbook/db"
@@ -284,6 +285,33 @@ func (w *Worker) getConfirmationETA(tx *Tx) (int64, uint32) {
 	return etaSeconds, etaBlocks
 }
 
+func (w *Worker) GetAddrDescAndTokenFromVout(vout *bchain.Vout) (bchain.AddressDescriptor, *bchain.BcashToken, error) {
+	if strings.HasSuffix(w.is.CoinShortcut, "BCH") {
+		return bch.GetAddrDescAndTokenFromVout(w.chainParser, vout)
+	}
+
+	addrDesc, err := w.chainParser.GetAddrDescFromVout(vout)
+	return addrDesc, nil, err
+}
+
+func (w *Worker) GetAddressesAndTokenFromAddrDesc(addrDesc bchain.AddressDescriptor) (bchain.AddressDescriptor, []string, bool, *bchain.BcashToken, error) {
+	if strings.HasSuffix(w.is.CoinShortcut, "BCH") {
+		return bch.GetAddressesAndTokenFromAddrDesc(w.chainParser, addrDesc)
+	}
+
+	addresses, isAddress, err := w.chainParser.GetAddressesFromAddrDesc(addrDesc)
+	return addrDesc, addresses, isAddress, nil, err
+}
+
+func (w *Worker) GetAddressesAndTokenFromVout(vout *bchain.Vout) (bchain.AddressDescriptor, []string, bool, *bchain.BcashToken, error) {
+	if strings.HasSuffix(w.is.CoinShortcut, "BCH") {
+		return bch.GetAddressesAndTokenFromVout(w.chainParser, vout)
+	}
+
+	addrDesc, addresses, isAddress, err := w.getAddressesFromVout(vout)
+	return addrDesc, addresses, isAddress, nil, err
+}
+
 // getTransactionFromBchainTx reads transaction data from txid
 func (w *Worker) getTransactionFromBchainTx(bchainTx *bchain.Tx, height int, spendingTxs bool, specificJSON bool, addresses map[string]struct{}) (*Tx, error) {
 	var err error
@@ -335,7 +363,7 @@ func (w *Worker) getTransactionFromBchainTx(bchainTx *bchain.Tx, height int, spe
 						if err == bchain.ErrTxNotFound {
 							// try to get AddrDesc using coin specific handling and continue processing the tx
 							vin.AddrDesc = w.chainParser.GetAddrDescForUnknownInput(bchainTx, i)
-							vin.Addresses, vin.IsAddress, err = w.chainParser.GetAddressesFromAddrDesc(vin.AddrDesc)
+							vin.AddrDesc, vin.Addresses, vin.IsAddress, vin.BcashToken, err = w.GetAddressesAndTokenFromAddrDesc(vin.AddrDesc)
 							if err != nil {
 								glog.Warning("GetAddressesFromAddrDesc tx ", bchainVin.Txid, ", addrDesc ", vin.AddrDesc, ": ", err)
 							}
@@ -352,7 +380,7 @@ func (w *Worker) getTransactionFromBchainTx(bchainTx *bchain.Tx, height int, spe
 					if len(otx.Vout) > int(vin.Vout) {
 						vout := &otx.Vout[vin.Vout]
 						vin.ValueSat = (*Amount)(&vout.ValueSat)
-						vin.AddrDesc, vin.Addresses, vin.IsAddress, err = w.getAddressesFromVout(vout)
+						vin.AddrDesc, vin.Addresses, vin.IsAddress, vin.BcashToken, err = w.GetAddressesAndTokenFromVout(vout)
 						if err != nil {
 							glog.Errorf("getAddressesFromVout error %v, vout %+v", err, vout)
 						}
@@ -364,6 +392,7 @@ func (w *Worker) getTransactionFromBchainTx(bchainTx *bchain.Tx, height int, spe
 						vin.ValueSat = (*Amount)(&output.ValueSat)
 						vin.AddrDesc = output.AddrDesc
 						vin.Addresses, vin.IsAddress, err = output.Addresses(w.chainParser)
+						vin.BcashToken = output.BcashToken
 						if err != nil {
 							glog.Errorf("output.Addresses error %v, tx %v, output %v", err, bchainVin.Txid, i)
 						}
@@ -394,7 +423,7 @@ func (w *Worker) getTransactionFromBchainTx(bchainTx *bchain.Tx, height int, spe
 		vout.ValueSat = (*Amount)(&bchainVout.ValueSat)
 		valOutSat.Add(&valOutSat, &bchainVout.ValueSat)
 		vout.Hex = bchainVout.ScriptPubKey.Hex
-		vout.AddrDesc, vout.Addresses, vout.IsAddress, err = w.getAddressesFromVout(bchainVout)
+		vout.AddrDesc, vout.Addresses, vout.IsAddress, vout.BcashToken, err = w.GetAddressesAndTokenFromVout(bchainVout)
 		if err != nil {
 			glog.V(2).Infof("getAddressesFromVout error %v, %v, output %v", err, bchainTx.Txid, bchainVout.N)
 		}
@@ -493,11 +522,6 @@ func (w *Worker) getTransactionFromBchainTx(bchainTx *bchain.Tx, height int, spe
 		}
 	}
 
-	bcashSpecific, err := w.bcashPostProcessApiTx(bchainTx.Txid, &vins, &vouts)
-	if err != nil {
-		return nil, errors.Annotatef(err, "bcashPostProcessApiTx %v", bchainTx.Txid)
-	}
-
 	r := &Tx{
 		Blockhash:        blockhash,
 		Blockheight:      height,
@@ -518,63 +542,12 @@ func (w *Worker) getTransactionFromBchainTx(bchainTx *bchain.Tx, height int, spe
 		CoinSpecificData: sj,
 		TokenTransfers:   tokens,
 		EthereumSpecific: ethSpecific,
-		BcashSpecific:    bcashSpecific,
 	}
 	if bchainTx.Confirmations == 0 {
 		r.Blocktime = int64(w.mempool.GetTransactionTime(bchainTx.Txid))
 		r.ConfirmationETASeconds, r.ConfirmationETABlocks = w.getConfirmationETA(r)
 	}
 	return r, nil
-}
-
-func (w *Worker) bcashPostProcessApiTx(txId string, vins *[]Vin, vouts *[]Vout) (*bchain.BcashSpecific, error) {
-	var bcashSpecific *bchain.BcashSpecific
-	if w.is.CoinShortcut == "BCH" {
-		voutTokens := make([]*bchain.BcashToken, len(*vouts))
-		nVoutTokens := 0
-		for i := 0; i < len(*vouts); i++ {
-			vout := &(*vouts)[i]
-			// BCH specific, parse token data from vout
-			token, pkScriptStart, err := w.chainParser.BcashTypeParseTokenData(vout.AddrDesc)
-			if err != nil {
-				glog.Errorf("BcashTypeParseTokenData error %v, tx %v, vout %v", err, txId, i)
-				return nil, err
-			}
-			if token != nil {
-				nVoutTokens++
-			}
-			voutTokens[i] = token
-			vout.Hex = vout.Hex[pkScriptStart*2:]
-		}
-
-		vinTokens := make([]*bchain.BcashToken, len(*vins))
-		nVinTokens := 0
-		for i := 0; i < len(*vins); i++ {
-			vin := &(*vins)[i]
-			// BCH specific, parse token data from vin
-			token, _, err := w.chainParser.BcashTypeParseTokenData(vin.AddrDesc)
-			if err != nil {
-				glog.Errorf("BcashTypeParseTokenData error %v, tx %v, vin %v", err, txId, i)
-				return nil, err
-			}
-			if token != nil {
-				nVinTokens++
-			}
-			vinTokens[i] = token
-		}
-
-		if nVoutTokens > 0 || nVinTokens > 0 {
-			bcashSpecific = &bchain.BcashSpecific{}
-			if nVoutTokens > 0 {
-				bcashSpecific.TokenVouts = voutTokens
-			}
-			if nVinTokens > 0 {
-				bcashSpecific.TokenVins = vinTokens
-			}
-		}
-	}
-
-	return bcashSpecific, nil
 }
 
 // GetTransactionFromMempoolTx converts bchain.MempoolTx to Tx, with limited amount of data
@@ -606,7 +579,7 @@ func (w *Worker) GetTransactionFromMempoolTx(mempoolTx *bchain.MempoolTx) (*Tx, 
 			if bchainVin.Txid != "" {
 				vin.ValueSat = (*Amount)(&bchainVin.ValueSat)
 				vin.AddrDesc = bchainVin.AddrDesc
-				vin.Addresses, vin.IsAddress, _ = w.chainParser.GetAddressesFromAddrDesc(vin.AddrDesc)
+				vin.AddrDesc, vin.Addresses, vin.IsAddress, vin.BcashToken, _ = w.GetAddressesAndTokenFromAddrDesc(vin.AddrDesc)
 				if vin.ValueSat != nil {
 					valInSat.Add(&valInSat, (*big.Int)(vin.ValueSat))
 				}
@@ -632,7 +605,7 @@ func (w *Worker) GetTransactionFromMempoolTx(mempoolTx *bchain.MempoolTx) (*Tx, 
 		vout.ValueSat = (*Amount)(&bchainVout.ValueSat)
 		valOutSat.Add(&valOutSat, &bchainVout.ValueSat)
 		vout.Hex = bchainVout.ScriptPubKey.Hex
-		vout.AddrDesc, vout.Addresses, vout.IsAddress, err = w.getAddressesFromVout(bchainVout)
+		vout.AddrDesc, vout.Addresses, vout.IsAddress, vout.BcashToken, err = w.GetAddressesAndTokenFromVout(bchainVout)
 		if err != nil {
 			glog.V(2).Infof("getAddressesFromVout error %v, %v, output %v", err, mempoolTx.Txid, bchainVout.N)
 		}
@@ -664,10 +637,10 @@ func (w *Worker) GetTransactionFromMempoolTx(mempoolTx *bchain.MempoolTx) (*Tx, 
 		}
 	}
 
-	bcashSpecific, err := w.bcashPostProcessApiTx(mempoolTx.Txid, &vins, &vouts)
-	if err != nil {
-		return nil, errors.Annotatef(err, "bcashPostProcessApiTx %v", mempoolTx.Txid)
-	}
+	// bcashSpecific, err := w.bcashPostProcessApiTx(mempoolTx.Txid, &vins, &vouts)
+	// if err != nil {
+	// 	return nil, errors.Annotatef(err, "bcashPostProcessApiTx %v", mempoolTx.Txid)
+	// }
 
 	r := &Tx{
 		Blocktime:        mempoolTx.Blocktime,
@@ -686,7 +659,7 @@ func (w *Worker) GetTransactionFromMempoolTx(mempoolTx *bchain.MempoolTx) (*Tx, 
 		TokenTransfers:   tokens,
 		EthereumSpecific: ethSpecific,
 		AddressAliases:   w.getAddressAliases(addresses),
-		BcashSpecific:    bcashSpecific,
+		// BcashSpecific:    bcashSpecific,
 	}
 	r.ConfirmationETASeconds, r.ConfirmationETABlocks = w.getConfirmationETA(r)
 	return r, nil
@@ -1853,7 +1826,7 @@ func (w *Worker) getAddrDescUtxo(addrDesc bchain.AddressDescriptor, ba *db.AddrB
 				if bchainTx != nil {
 					for i := range bchainTx.Vout {
 						vout := &bchainTx.Vout[i]
-						vad, err := w.chainParser.GetAddrDescFromVout(vout)
+						vad, bcashToken, err := w.GetAddrDescAndTokenFromVout(vout)
 						if err == nil && bytes.Equal(addrDesc, vad) {
 							// report only outpoints that are not spent in mempool
 							_, e := spentInMempool[bchainTx.Txid+strconv.Itoa(i)]
@@ -1863,11 +1836,12 @@ func (w *Worker) getAddrDescUtxo(addrDesc bchain.AddressDescriptor, ba *db.AddrB
 									coinbase = true
 								}
 								utxos = append(utxos, Utxo{
-									Txid:      bchainTx.Txid,
-									Vout:      int32(i),
-									AmountSat: (*Amount)(&vout.ValueSat),
-									Locktime:  bchainTx.LockTime,
-									Coinbase:  coinbase,
+									Txid:       bchainTx.Txid,
+									Vout:       int32(i),
+									AmountSat:  (*Amount)(&vout.ValueSat),
+									Locktime:   bchainTx.LockTime,
+									Coinbase:   coinbase,
+									BcashToken: bcashToken,
 								})
 								inMempool[bchainTx.Txid] = struct{}{}
 							}
@@ -1924,6 +1898,7 @@ func (w *Worker) getAddrDescUtxo(addrDesc bchain.AddressDescriptor, ba *db.AddrB
 							Height:        int(utxo.Height),
 							Confirmations: confirmations,
 							Coinbase:      coinbase,
+							BcashToken:    utxo.BcashToken,
 						})
 					}
 				}
