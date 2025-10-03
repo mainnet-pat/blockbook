@@ -79,3 +79,11 @@ func (a *Amount) AsInt64() int64 {
 	}
 	return (*big.Int)(a).Int64()
 }
+
+// AsUint64 returns Amount as uint64 (0 if Amount is nil).
+func (a *Amount) AsUint64() uint64 {
+	if a == nil {
+		return 0
+	}
+	return (*big.Int)(a).Uint64()
+}

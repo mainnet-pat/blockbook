@@ -342,7 +342,7 @@ func UnpackTokenData(buf []byte) (*bchain.BcashToken, int, error) {
 }
 
 func PackTokenData(token *bchain.BcashToken) []byte {
-	if token == nil || (token.Nft == nil && token.Amount.AsInt64() == 0) {
+	if token == nil || (token.Nft == nil && token.Amount.AsUint64() == 0) {
 		return []byte{}
 	}
 
@@ -371,7 +371,7 @@ func PackTokenData(token *bchain.BcashToken) []byte {
 			commitmentBytes, _ = hex.DecodeString(token.Nft.Commitment)
 		}
 	}
-	if token.Amount.AsInt64() != 0 {
+	if token.Amount.AsUint64() != 0 {
 		tokenBitfield |= bchain.HAS_AMOUNT
 	}
 	result = append(result, tokenBitfield)
@@ -388,7 +388,7 @@ func PackTokenData(token *bchain.BcashToken) []byte {
 	// Amount
 	if tokenBitfield&bchain.HAS_AMOUNT != 0 {
 		var buf bytes.Buffer
-		_ = wire.WriteVarInt(&buf, 0, uint64(token.Amount.AsInt64()))
+		_ = wire.WriteVarInt(&buf, 0, token.Amount.AsUint64())
 		result = append(result, buf.Bytes()...)
 	}
 

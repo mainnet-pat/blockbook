@@ -1354,6 +1354,71 @@ func setIsOwnAddress(tx *Tx, address string) {
 	}
 }
 
+func (w *Worker) getBchTokenSummary(ba *db.AddrBalance, option AccountDetails) *Tokens {
+	if !strings.HasSuffix(w.is.CoinShortcut, "BCH") {
+		return nil
+	}
+
+	if ba == nil || len(ba.Utxos) == 0 {
+		return nil
+	}
+
+	tokensMap := make(map[string]*Token)
+	for i := range ba.Utxos {
+		u := &ba.Utxos[i]
+		if u.BcashToken == nil {
+			continue
+		}
+
+		t, found := tokensMap[u.BcashToken.Category]
+		if !found {
+			t = &Token{
+				Category: u.BcashToken.Category,
+				// Name:      u.BcashToken.Name,
+				// Symbol:    u.BcashToken.Symbol,
+				// Decimals:  int(u.BcashToken.Decimals),
+				Type:     bchain.CashTokenStandard,
+				Standard: bchain.CashTokenStandard,
+				// BalanceSat:  (*Amount)(big.NewInt(0)),
+				// Commitments: make([]string, 0),
+			}
+
+			if option >= AccountDetailsTokenBalances {
+				t.BalanceSat = (*Amount)(big.NewInt(0))
+				t.Commitments = make([]string, 0)
+			}
+
+			tokensMap[u.BcashToken.Category] = t
+		}
+
+		if option >= AccountDetailsTokenBalances {
+			t.BalanceSat = (*Amount)(new(big.Int).Add((*big.Int)(t.BalanceSat), (*big.Int)(&u.BcashToken.Amount)))
+			if u.BcashToken.Nft != nil {
+				t.Commitments = append(t.Commitments, u.BcashToken.Nft.Commitment)
+			}
+		}
+	}
+
+	if len(tokensMap) == 0 {
+		return nil
+	}
+
+	tokens := make(Tokens, 0, len(tokensMap))
+	for _, t := range tokensMap {
+		if len(t.Commitments) > 1 {
+			sort.Slice(t.Commitments, func(i, j int) bool {
+				if len(t.Commitments[i]) == len(t.Commitments[j]) {
+					return t.Commitments[i] < t.Commitments[j]
+				}
+				return len(t.Commitments[i]) < len(t.Commitments[j])
+			})
+		}
+		tokens = append(tokens, *t)
+	}
+
+	return &tokens
+}
+
 // GetAddress computes address value and gets transactions for given address
 func (w *Worker) GetAddress(address string, page int, txsOnPage int, option AccountDetails, filter *AddressFilter, secondaryCoin string) (*Address, error) {
 	start := time.Now()
@@ -1387,7 +1452,11 @@ func (w *Worker) GetAddress(address string, page int, txsOnPage int, option Acco
 		totalResults = ed.totalResults
 	} else {
 		// ba can be nil if the address is only in mempool!
-		ba, err = w.db.GetAddrDescBalance(addrDesc, db.AddressBalanceDetailNoUTXO)
+		utxoOption := db.AddressBalanceDetailNoUTXO
+		if option >= AccountDetailsTokens {
+			utxoOption = db.AddressBalanceDetailUTXO
+		}
+		ba, err = w.db.GetAddrDescBalance(addrDesc, db.AddressBalanceDetail(utxoOption))
 		if err != nil {
 			return nil, NewAPIError(fmt.Sprintf("Address not found, %v", err), true)
 		}
@@ -1397,6 +1466,13 @@ func (w *Worker) GetAddress(address string, page int, txsOnPage int, option Acco
 				totalResults = int(ba.Txs)
 			} else {
 				totalResults = -1
+			}
+
+			if option >= AccountDetailsTokenBalances {
+				tokens := w.getBchTokenSummary(ba, option)
+				if tokens != nil {
+					ed.tokens = *tokens
+				}
 			}
 		}
 	}

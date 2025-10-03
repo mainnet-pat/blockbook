@@ -194,6 +194,8 @@ type Token struct {
 	TotalReceivedSat *Amount                  `json:"totalReceived,omitempty" ts_doc:"Total amount of tokens received."`
 	TotalSentSat     *Amount                  `json:"totalSent,omitempty" ts_doc:"Total amount of tokens sent."`
 	ContractIndex    string                   `json:"-"`
+	Category         string                   `json:"category,omitempty" ts_doc:"Identifier of the token, 32 bytes"`
+	Commitments      []string                 `json:"commitments,omitempty" ts_doc:"Array of hex-encoded token commitments, each up to 40 bytes"`
 }
 
 // Tokens is array of Token

@@ -1963,3 +1963,57 @@ func TestRocksDB_packTxIndexes_unpackTxIndexes(t *testing.T) {
 		})
 	}
 }
+
+func Test_packBcashToken_unpackBcashToken(t *testing.T) {
+	parser := bcashTestnetParser()
+	d := getRocksDb(parser, false, t).setCoinShortcut("BCH")
+	defer closeAndDestroyRocksDB(t, d)
+
+	tests := []struct {
+		name  string
+		token *BcashToken
+	}{
+		{
+			name:  "token is nil",
+			token: nil,
+		},
+		{
+			name: "no commitments",
+			token: &BcashToken{
+				Standard:      bchain.CashToken,
+				Txs:           123,
+				GenesisSupply: *big.NewInt(1000),
+				Commitments:   []string{},
+			},
+		},
+		{
+			name: "with commitments",
+			token: &BcashToken{
+				Standard:      bchain.CashToken,
+				Txs:           123,
+				GenesisSupply: *big.NewInt(1000),
+				Commitments:   []string{"aa", "bb"},
+			},
+		},
+	}
+	varBuf := make([]byte, maxPackedBigintBytes)
+	buf := make([]byte, 32)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := packBcashToken(tt.token, buf, varBuf)
+
+			got1, l, err := unpackBcashToken(b)
+			if l != len(b) {
+				t.Errorf("unpackBcashToken() len = %v, want %v", l, len(b))
+			}
+
+			if err != nil {
+				t.Errorf("unpackBcashToken() error = %v", err)
+				return
+			}
+			if !reflect.DeepEqual(got1, tt.token) {
+				t.Errorf("unpackTxAddresses() = %+v, want %+v", got1, tt.token)
+			}
+		})
+	}
+}
