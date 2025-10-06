@@ -18,6 +18,11 @@ import (
 	"github.com/trezor/blockbook/common"
 )
 
+func hexToBytes(h string) []byte {
+	b, _ := hex.DecodeString(h)
+	return b
+}
+
 func TestMain(m *testing.M) {
 	c := m.Run()
 	chaincfg.ResetParams()
@@ -227,6 +232,14 @@ func Test_GetAddressesFromAddrDesc(t *testing.T) {
 			addresses:  []string{"OP_RETURN 2020f1686f6a20"},
 			searchable: false,
 			hex:        "6a072020f1686f6a20",
+			wantErr:    false,
+		},
+		{
+			name:       "OP_RETURN BCMR",
+			parser:     mainParserCashAddr,
+			addresses:  []string{"OP_RETURN (BCMR 13f93a5fb1df5cbe30382368b39992287add714a5b682c0be02d6849536e5d6c gist.githubusercontent.com/alpsy05/55c602d49e44842fa41dfcabed237a15/raw/148812af3c25fb1cf91d3fbae4fc9e5cd1d501e5/Cash)"},
+			searchable: false,
+			hex:        "6a0442434d522013f93a5fb1df5cbe30382368b39992287add714a5b682c0be02d6849536e5d6c4c75676973742e67697468756275736572636f6e74656e742e636f6d2f616c70737930352f35356336303264343965343438343266613431646663616265643233376131352f7261772f313438383132616633633235666231636639316433666261653466633965356364316435303165352f43617368",
 			wantErr:    false,
 		},
 		{
@@ -763,19 +776,19 @@ func Test_UnpackTx(t *testing.T) {
 			wantErr: false,
 			wantTokens: []*bchain.BcashToken{
 				{
-					Category: "5e437326449aba7855da3f5922fd65cfee6eab17c6869e0636016300b0f1c3c1",
+					Category: hexToBytes("5e437326449aba7855da3f5922fd65cfee6eab17c6869e0636016300b0f1c3c1"),
 					Amount:   (common.Amount)(*big.NewInt(0)),
 					Nft: &bchain.BcashTokenNft{
 						Capability: bchain.BcashNFTCapabilityLabel("none"),
-						Commitment: "",
+						Commitment: hexToBytes(""),
 					},
 				},
 				{
-					Category: "d0d46f5cbd82188acede0d3e49c75700c19cb8331a30101f0bb6a260066ac972",
+					Category: hexToBytes("d0d46f5cbd82188acede0d3e49c75700c19cb8331a30101f0bb6a260066ac972"),
 					Amount:   (common.Amount)(*big.NewInt(0)),
 					Nft: &bchain.BcashTokenNft{
 						Capability: bchain.BcashNFTCapabilityLabel("mutable"),
-						Commitment: "15ac95680000e803a037130053e10000",
+						Commitment: hexToBytes("15ac95680000e803a037130053e10000"),
 					},
 				},
 				nil,
@@ -792,48 +805,48 @@ func Test_UnpackTx(t *testing.T) {
 			wantErr: false,
 			wantTokens: []*bchain.BcashToken{
 				{
-					Category: "b38a33f750f84c5c169a6f23cb873e6e79605021585d4f3408789689ed87f366",
+					Category: hexToBytes("b38a33f750f84c5c169a6f23cb873e6e79605021585d4f3408789689ed87f366"),
 					Amount:   (common.Amount)(*big.NewInt(4503599605433096)),
 					Nft: &bchain.BcashTokenNft{
 						Capability: bchain.BcashNFTCapabilityLabel("minting"),
-						Commitment: "f13913",
+						Commitment: hexToBytes("f13913"),
 					},
 				},
 				{
-					Category: "d0d46f5cbd82188acede0d3e49c75700c19cb8331a30101f0bb6a260066ac972",
+					Category: hexToBytes("d0d46f5cbd82188acede0d3e49c75700c19cb8331a30101f0bb6a260066ac972"),
 					Amount:   (common.Amount)(*big.NewInt(0)),
 					Nft: &bchain.BcashTokenNft{
 						Capability: bchain.BcashNFTCapabilityLabel("mutable"),
-						Commitment: "1b3796680000e803f139130035e40000",
+						Commitment: hexToBytes("1b3796680000e803f139130035e40000"),
 					},
 				},
 				{
-					Category: "b38a33f750f84c5c169a6f23cb873e6e79605021585d4f3408789689ed87f366",
+					Category: hexToBytes("b38a33f750f84c5c169a6f23cb873e6e79605021585d4f3408789689ed87f366"),
 					Amount:   (common.Amount)(*big.NewInt(0)),
 					Nft: &bchain.BcashTokenNft{
 						Capability: bchain.BcashNFTCapabilityLabel("none"),
-						Commitment: "fef765e9999e6248699a45a68847c06e7d5cb36f49f42e554995a6ec1720ffbbe02e81011b379668",
+						Commitment: hexToBytes("fef765e9999e6248699a45a68847c06e7d5cb36f49f42e554995a6ec1720ffbbe02e81011b379668"),
 					},
 				},
 				{
-					Category: "b38a33f750f84c5c169a6f23cb873e6e79605021585d4f3408789689ed87f366",
+					Category: hexToBytes("b38a33f750f84c5c169a6f23cb873e6e79605021585d4f3408789689ed87f366"),
 					Amount:   (common.Amount)(*big.NewInt(1200000)),
 				},
 				nil,
 				{
-					Category: "9c8362ec067e2d516064b6184b6ef0c9a6e5daa7dfb4693e9764de48460b3d9b",
+					Category: hexToBytes("9c8362ec067e2d516064b6184b6ef0c9a6e5daa7dfb4693e9764de48460b3d9b"),
 					Amount:   (common.Amount)(*big.NewInt(0)),
 					Nft: &bchain.BcashTokenNft{
 						Capability: bchain.BcashNFTCapabilityLabel("minting"),
-						Commitment: "dc02",
+						Commitment: hexToBytes("dc02"),
 					},
 				},
 				{
-					Category: "9c8362ec067e2d516064b6184b6ef0c9a6e5daa7dfb4693e9764de48460b3d9b",
+					Category: hexToBytes("9c8362ec067e2d516064b6184b6ef0c9a6e5daa7dfb4693e9764de48460b3d9b"),
 					Amount:   (common.Amount)(*big.NewInt(0)),
 					Nft: &bchain.BcashTokenNft{
 						Capability: bchain.BcashNFTCapabilityLabel("none"),
-						Commitment: "db02",
+						Commitment: hexToBytes("db02"),
 					},
 				},
 			},
@@ -935,8 +948,8 @@ func Test_ValidTokenPrefixes(t *testing.T) {
 		if token.Amount.String() != amount {
 			t.Errorf("amount: got %s, want %s", token.Amount.String(), amount)
 		}
-		if token.Category != category {
-			t.Errorf("category: got %s, want %s", token.Category, category)
+		if hex.EncodeToString(token.Category) != category {
+			t.Errorf("category: got %s, want %s", hex.EncodeToString(token.Category), category)
 		}
 
 		if commitment != "" || nftCapability != "" {
@@ -944,7 +957,7 @@ func Test_ValidTokenPrefixes(t *testing.T) {
 				t.Fatalf("expected token to have NFT data, but got nil")
 			}
 
-			if token.Nft.Commitment != commitment {
+			if hex.EncodeToString(token.Nft.Commitment) != commitment {
 				t.Errorf("commitment: got %s, want %s", token.Nft.Commitment, commitment)
 			}
 			if string(token.Nft.Capability) != nftCapability {
@@ -955,6 +968,20 @@ func Test_ValidTokenPrefixes(t *testing.T) {
 		tokenData := PackTokenData(token)
 		if !bytes.Equal(tokenData, prefix) {
 			t.Errorf("packed token data does not match original prefix.\ngot:  %x\nwant: %x", tokenData, prefix)
+		}
+
+		unpacked, l, err := UnpackTokenData(tokenData)
+		if err != nil {
+			t.Fatalf("UnpackTokenData failed: %v", err)
+		}
+		if l != len(tokenData) {
+			t.Errorf("UnpackTokenData length mismatch: got %d, want %d", l, len(tokenData))
+		}
+		if hex.EncodeToString(token.Category) != hex.EncodeToString(unpacked.Category) {
+			t.Errorf("category: got %s, want %s", hex.EncodeToString(token.Category), hex.EncodeToString(unpacked.Category))
+		}
+		if !reflect.DeepEqual(unpacked, token) {
+			t.Errorf("UnpackTokenData result mismatch:\ngot:  %+v\nwant: %+v", unpacked, token)
 		}
 	}
 }

@@ -111,6 +111,11 @@ func GetChainParams(chain string) *chaincfg.Params {
 
 // GetAddrDescFromAddress returns internal address representation of given address
 func (p *BCashParser) GetAddrDescFromAddress(address string) (bchain.AddressDescriptor, error) {
+	category, err := hex.DecodeString(address)
+	if err == nil && len(category) == 32 {
+		// valid hex, 32 bytes long, assume it is token category
+		return category, nil
+	}
 	return p.addressToOutputScript(address)
 }
 
@@ -256,10 +261,11 @@ func UnpackTokenData(buf []byte) (*bchain.BcashToken, int, error) {
 	// Read tokenId (32 bytes, reversed)
 	categoryBin := make([]byte, 32)
 	br.Read(categoryBin[:])
+	// reverse categoryBin
 	for i, j := 0, len(categoryBin)-1; i < j; i, j = i+1, j-1 {
 		categoryBin[i], categoryBin[j] = categoryBin[j], categoryBin[i]
 	}
-	token.Category = hex.EncodeToString(categoryBin)
+	token.Category = categoryBin
 
 	// Read bitfield
 	bitfield, err := br.ReadByte()
@@ -308,9 +314,9 @@ func UnpackTokenData(buf []byte) (*bchain.BcashToken, int, error) {
 			if err != nil {
 				return nil, 0, fmt.Errorf("Invalid token prefix: invalid non-fungible token commitment.")
 			}
-			token.Nft.Commitment = hex.EncodeToString(commitmentBin)
+			token.Nft.Commitment = commitmentBin
 		} else {
-			token.Nft.Commitment = ""
+			token.Nft.Commitment = []byte{}
 		}
 	} else {
 		if hasCommitmentLength != 0 {
@@ -349,9 +355,8 @@ func PackTokenData(token *bchain.BcashToken) []byte {
 	var result []byte
 	result = append(result, bchain.PREFIX_TOKEN)
 
-	// category: hex string, needs to be reversed
-	categoryBytes, err := hex.DecodeString(token.Category)
-	if err != nil || len(categoryBytes) != 32 {
+	categoryBytes := bytes.Clone(token.Category[:])
+	if len(categoryBytes) != 32 {
 		return []byte{}
 	}
 	// reverse categoryBytes
@@ -368,7 +373,7 @@ func PackTokenData(token *bchain.BcashToken) []byte {
 		tokenBitfield |= byte(capabilityInt)
 		if len(token.Nft.Commitment) > 0 {
 			tokenBitfield |= bchain.HAS_COMMITMENT_LEN
-			commitmentBytes, _ = hex.DecodeString(token.Nft.Commitment)
+			commitmentBytes = token.Nft.Commitment
 		}
 	}
 	if token.Amount.AsUint64() != 0 {

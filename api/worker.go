@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -286,7 +287,7 @@ func (w *Worker) getConfirmationETA(tx *Tx) (int64, uint32) {
 }
 
 func (w *Worker) GetAddrDescAndTokenFromVout(vout *bchain.Vout) (bchain.AddressDescriptor, *bchain.BcashToken, error) {
-	if strings.HasSuffix(w.is.CoinShortcut, "BCH") {
+	if w.is.IsBCH() {
 		return bch.GetAddrDescAndTokenFromVout(w.chainParser, vout)
 	}
 
@@ -295,7 +296,7 @@ func (w *Worker) GetAddrDescAndTokenFromVout(vout *bchain.Vout) (bchain.AddressD
 }
 
 func (w *Worker) GetAddressesAndTokenFromAddrDesc(addrDesc bchain.AddressDescriptor) (bchain.AddressDescriptor, []string, bool, *bchain.BcashToken, error) {
-	if strings.HasSuffix(w.is.CoinShortcut, "BCH") {
+	if w.is.IsBCH() {
 		return bch.GetAddressesAndTokenFromAddrDesc(w.chainParser, addrDesc)
 	}
 
@@ -304,7 +305,7 @@ func (w *Worker) GetAddressesAndTokenFromAddrDesc(addrDesc bchain.AddressDescrip
 }
 
 func (w *Worker) GetAddressesAndTokenFromVout(vout *bchain.Vout) (bchain.AddressDescriptor, []string, bool, *bchain.BcashToken, error) {
-	if strings.HasSuffix(w.is.CoinShortcut, "BCH") {
+	if w.is.IsBCH() {
 		return bch.GetAddressesAndTokenFromVout(w.chainParser, vout)
 	}
 
@@ -928,6 +929,7 @@ func (w *Worker) txFromTxAddress(txid string, ta *db.TxAddresses, bi *db.BlockIn
 		vin.ValueSat = (*Amount)(&tai.ValueSat)
 		valInSat.Add(&valInSat, &tai.ValueSat)
 		vin.Addresses, vin.IsAddress, err = tai.Addresses(w.chainParser)
+		vin.BcashToken = tai.BcashToken
 		if err != nil {
 			glog.Errorf("tai.Addresses error %v, tx %v, input %v, tai %+v", err, txid, i, tai)
 		}
@@ -945,6 +947,7 @@ func (w *Worker) txFromTxAddress(txid string, ta *db.TxAddresses, bi *db.BlockIn
 		vout.ValueSat = (*Amount)(&tao.ValueSat)
 		valOutSat.Add(&valOutSat, &tao.ValueSat)
 		vout.Addresses, vout.IsAddress, err = tao.Addresses(w.chainParser)
+		vout.BcashToken = tao.BcashToken
 		if err != nil {
 			glog.Errorf("tai.Addresses error %v, tx %v, output %v, tao %+v", err, txid, i, tao)
 		}
@@ -1355,7 +1358,7 @@ func setIsOwnAddress(tx *Tx, address string) {
 }
 
 func (w *Worker) getBchTokenSummary(ba *db.AddrBalance, option AccountDetails) *Tokens {
-	if !strings.HasSuffix(w.is.CoinShortcut, "BCH") {
+	if !w.is.IsBCH() {
 		return nil
 	}
 
@@ -1370,10 +1373,10 @@ func (w *Worker) getBchTokenSummary(ba *db.AddrBalance, option AccountDetails) *
 			continue
 		}
 
-		t, found := tokensMap[u.BcashToken.Category]
+		t, found := tokensMap[string(u.BcashToken.Category)]
 		if !found {
 			t = &Token{
-				Category: u.BcashToken.Category,
+				Category: hex.EncodeToString(u.BcashToken.Category),
 				// Name:      u.BcashToken.Name,
 				// Symbol:    u.BcashToken.Symbol,
 				// Decimals:  int(u.BcashToken.Decimals),
@@ -1388,13 +1391,13 @@ func (w *Worker) getBchTokenSummary(ba *db.AddrBalance, option AccountDetails) *
 				t.Commitments = make([]string, 0)
 			}
 
-			tokensMap[u.BcashToken.Category] = t
+			tokensMap[string(u.BcashToken.Category)] = t
 		}
 
 		if option >= AccountDetailsTokenBalances {
 			t.BalanceSat = (*Amount)(new(big.Int).Add((*big.Int)(t.BalanceSat), (*big.Int)(&u.BcashToken.Amount)))
 			if u.BcashToken.Nft != nil {
-				t.Commitments = append(t.Commitments, u.BcashToken.Nft.Commitment)
+				t.Commitments = append(t.Commitments, hex.EncodeToString(u.BcashToken.Nft.Commitment))
 			}
 		}
 	}
@@ -1406,6 +1409,7 @@ func (w *Worker) getBchTokenSummary(ba *db.AddrBalance, option AccountDetails) *
 	tokens := make(Tokens, 0, len(tokensMap))
 	for _, t := range tokensMap {
 		if len(t.Commitments) > 1 {
+			// sort by length and then alphabetically
 			sort.Slice(t.Commitments, func(i, j int) bool {
 				if len(t.Commitments[i]) == len(t.Commitments[j]) {
 					return t.Commitments[i] < t.Commitments[j]

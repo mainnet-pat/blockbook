@@ -1185,9 +1185,9 @@ func Test_packTxAddresses_unpackTxAddresses(t *testing.T) {
 						ValueSat: *big.NewInt(1234123421342341234),
 						BcashToken: &bchain.BcashToken{
 							Amount:   (common.Amount)(*big.NewInt(4294967296)),
-							Category: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+							Category: hexToBytes("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
 							Nft: &bchain.BcashTokenNft{
-								Commitment: "cc",
+								Commitment: hexToBytes("cc"),
 								Capability: "mutable",
 							},
 						},
@@ -1200,9 +1200,9 @@ func Test_packTxAddresses_unpackTxAddresses(t *testing.T) {
 						Spent:    true,
 						BcashToken: &bchain.BcashToken{
 							Amount:   (common.Amount)(*big.NewInt(1)),
-							Category: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+							Category: hexToBytes("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
 							Nft: &bchain.BcashTokenNft{
-								Commitment: "cccc",
+								Commitment: hexToBytes("cccc"),
 								Capability: "mutable",
 							},
 						},
@@ -1237,9 +1237,9 @@ func Test_packTxAddresses_unpackTxAddresses(t *testing.T) {
 						Vout:     134,
 						BcashToken: &bchain.BcashToken{
 							Amount:   (common.Amount)(*big.NewInt(4294967296)),
-							Category: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+							Category: hexToBytes("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
 							Nft: &bchain.BcashTokenNft{
-								Commitment: "cc",
+								Commitment: hexToBytes("cc"),
 								Capability: "mutable",
 							},
 						},
@@ -1279,9 +1279,9 @@ func Test_packTxAddresses_unpackTxAddresses(t *testing.T) {
 						SpentHeight: 6666666,
 						BcashToken: &bchain.BcashToken{
 							Amount:   (common.Amount)(*big.NewInt(1)),
-							Category: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+							Category: hexToBytes("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
 							Nft: &bchain.BcashTokenNft{
-								Commitment: "cccc",
+								Commitment: hexToBytes("cccc"),
 								Capability: "mutable",
 							},
 						},
@@ -1439,9 +1439,9 @@ func Test_packAddrBalance_unpackAddrBalance_Bcash(t *testing.T) {
 						ValueSat: *big.NewInt(9123372036854775807),
 						BcashToken: &bchain.BcashToken{
 							Amount:   (common.Amount)(*big.NewInt(4294967296)),
-							Category: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+							Category: hexToBytes("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
 							Nft: &bchain.BcashTokenNft{
-								Commitment: "cc",
+								Commitment: hexToBytes("cc"),
 								Capability: "mutable",
 							},
 						},
@@ -1575,9 +1575,9 @@ func TestAddrBalance_utxo_methods(t *testing.T) {
 		ValueSat: *big.NewInt(100),
 		BcashToken: &bchain.BcashToken{
 			Amount:   (common.Amount)(*big.NewInt(4294967296)),
-			Category: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			Category: hexToBytes("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
 			Nft: &bchain.BcashTokenNft{
-				Commitment: "cc",
+				Commitment: hexToBytes("cc"),
 				Capability: "mutable",
 			},
 		},
@@ -1594,9 +1594,9 @@ func TestAddrBalance_utxo_methods(t *testing.T) {
 				ValueSat: *big.NewInt(100),
 				BcashToken: &bchain.BcashToken{
 					Amount:   (common.Amount)(*big.NewInt(4294967296)),
-					Category: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+					Category: hexToBytes("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
 					Nft: &bchain.BcashTokenNft{
-						Commitment: "cc",
+						Commitment: hexToBytes("cc"),
 						Capability: "mutable",
 					},
 				},
@@ -1983,7 +1983,7 @@ func Test_packBcashToken_unpackBcashToken(t *testing.T) {
 				Standard:      bchain.CashToken,
 				Txs:           123,
 				GenesisSupply: *big.NewInt(1000),
-				Commitments:   []string{},
+				Commitments:   [][]byte{},
 			},
 		},
 		{
@@ -1992,7 +1992,7 @@ func Test_packBcashToken_unpackBcashToken(t *testing.T) {
 				Standard:      bchain.CashToken,
 				Txs:           123,
 				GenesisSupply: *big.NewInt(1000),
-				Commitments:   []string{"aa", "bb"},
+				Commitments:   [][]byte{hexToBytes("aa"), hexToBytes("bb")},
 			},
 		},
 	}

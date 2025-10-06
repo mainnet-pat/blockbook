@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 	"unsafe"
@@ -428,7 +427,7 @@ type BcashToken struct {
 	Standard      bchain.TokenStandard
 	Txs           uint
 	GenesisSupply big.Int
-	Commitments   []string
+	Commitments   [][]byte
 }
 
 func packBcashToken(token *BcashToken, buf []byte, varBuf []byte) []byte {
@@ -449,7 +448,7 @@ func packBcashToken(token *BcashToken, buf []byte, varBuf []byte) []byte {
 	l = packVaruint(uint(len(token.Commitments)), varBuf)
 	buf = append(buf, varBuf[:l]...)
 	for _, c := range token.Commitments {
-		cBytes := packHexString(c)
+		cBytes := packString(string(c))
 		buf = append(buf, cBytes...)
 	}
 
@@ -479,23 +478,22 @@ func unpackBcashToken(buf []byte) (*BcashToken, int, error) {
 	// Commitments
 	commitmentsCount, l := unpackVaruint(buf[al:])
 	al += l
-	token.Commitments = make([]string, commitmentsCount)
+	token.Commitments = make([][]byte, commitmentsCount)
 	for i := range commitmentsCount {
-		commitment, ll := unpackHexString(buf[al:])
+		commitment, ll := unpackString(buf[al:])
 		al += ll
-		token.Commitments[i] = commitment
+		token.Commitments[i] = []byte(commitment)
 	}
 
 	return &token, al, nil
 }
 
 // GetBcashToken returns the BcashToken for a given category or nil if not found.
-func (d *RocksDB) GetBcashToken(category string) (*BcashToken, error) {
-	bin, err := hex.DecodeString(category)
-	if err != nil || len(bin) != 32 {
+func (d *RocksDB) GetBcashToken(category []byte) (*BcashToken, error) {
+	if len(category) != 32 {
 		return nil, errors.New("Invalid category")
 	}
-	val, err := d.db.GetCF(d.ro, d.cfh[cfBcashTokens], bin)
+	val, err := d.db.GetCF(d.ro, d.cfh[cfBcashTokens], category)
 	if err != nil {
 		return nil, err
 	}
@@ -513,16 +511,16 @@ func (d *RocksDB) storeBcashTokens(wb *grocksdb.WriteBatch, tokens map[string]*B
 	varBuf := make([]byte, maxPackedBigintBytes)
 	buf := make([]byte, 1024)
 	for category, token := range tokens {
-		bin, err := hex.DecodeString(category)
-		if err != nil || len(bin) != 32 {
-			glog.Warningf("rocksdb: bcash token invalid category %s", category)
+		key := []byte(category)
+		if len(key) != 32 {
+			glog.Warningf("rocksdb: bcash token invalid category %s", hex.EncodeToString(key))
 			continue
 		}
 		if token == nil {
-			wb.DeleteCF(d.cfh[cfBcashTokens], bin)
+			wb.DeleteCF(d.cfh[cfBcashTokens], key)
 		} else {
 			buf = packBcashToken(token, buf, varBuf)
-			wb.PutCF(d.cfh[cfBcashTokens], bin, buf)
+			wb.PutCF(d.cfh[cfBcashTokens], key, buf)
 		}
 	}
 	return nil
@@ -756,7 +754,7 @@ func (d *RocksDB) processAddressesBitcoinType(block *bchain.Block, addresses add
 			var addrDesc bchain.AddressDescriptor
 			var err error
 			var bcashToken *bchain.BcashToken
-			if strings.HasSuffix(d.is.CoinShortcut, "BCH") {
+			if d.is.IsBCH() {
 				script, _ := hex.DecodeString(output.ScriptPubKey.Hex)
 				var l int
 				bcashToken, l, err = bch.UnpackTokenData(script)
@@ -908,15 +906,25 @@ func (d *RocksDB) processAddressesBitcoinType(block *bchain.Block, addresses add
 		}
 	}
 
-	if !strings.HasSuffix(d.is.CoinShortcut, "BCH") {
+	err := d.processBcashTokens(block, addresses, bcashTokens, &blockTxIDs, blockTxAddresses)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (d *RocksDB) processBcashTokens(block *bchain.Block, addresses addressesMap, bcashTokens map[string]*BcashToken, blockTxIDs *[][]byte, blockTxAddresses []*TxAddresses) error {
+	// TODO: extract CashTokens activation height to chain params
+	if !d.is.IsBCH() || block.Height <= 792772 {
 		return nil
 	}
 
 	// process bcash token data
 	genesisSupplyMap := make(map[string]uint64)
 	tokenTxsMap := make(map[string]map[string]bool)
-	spentCommitments := make(map[string]bool)
-	createdCommitments := make(map[string]bool)
+	spentCommitments := make(map[string]map[string]bool)
+	createdCommitments := make(map[string]map[string]bool)
 
 	for txi := range block.Txs {
 		tx := &block.Txs[txi]
@@ -929,28 +937,33 @@ func (d *RocksDB) processAddressesBitcoinType(block *bchain.Block, addresses add
 				if err != nil {
 					return err
 				}
-				addToAddressesMap(addresses, tao.BcashToken.Category, btxID, int32(i))
 
-				if tokenTxsMap[tao.BcashToken.Category] == nil {
-					tokenTxsMap[tao.BcashToken.Category] = make(map[string]bool)
+				sCategory := string(tao.BcashToken.Category)
+				addToAddressesMap(addresses, sCategory, btxID, int32(i))
+
+				if tokenTxsMap[sCategory] == nil {
+					tokenTxsMap[sCategory] = make(map[string]bool)
 				}
-				tokenTxsMap[tao.BcashToken.Category][string(stxID)] = true
+				tokenTxsMap[sCategory][string(stxID)] = true
 
 				if tao.BcashToken.Nft != nil {
-					createdCommitments[tao.BcashToken.Nft.Commitment] = true
+					if createdCommitments[sCategory] == nil {
+						createdCommitments[sCategory] = make(map[string]bool)
+					}
+					createdCommitments[sCategory][string(tao.BcashToken.Nft.Commitment)] = true
 				}
 
 				// Check if there are no inputs with this output token category
 				hasInputWithCategory := false
 				for _, input := range ta.Inputs {
-					if input.BcashToken != nil && input.BcashToken.Category == tao.BcashToken.Category {
+					if input.BcashToken != nil && bytes.Equal(input.BcashToken.Category, tao.BcashToken.Category) {
 						hasInputWithCategory = true
 						break
 					}
 				}
 				if !hasInputWithCategory {
 					// No input with this token category, treat as genesis supply
-					genesisSupplyMap[tao.BcashToken.Category] += tao.BcashToken.Amount.AsUint64()
+					genesisSupplyMap[sCategory] += tao.BcashToken.Amount.AsUint64()
 				}
 			}
 		}
@@ -958,32 +971,30 @@ func (d *RocksDB) processAddressesBitcoinType(block *bchain.Block, addresses add
 		for i := range ta.Inputs {
 			tai := &ta.Inputs[i]
 			if tai.BcashToken != nil {
-				spendingTxid := blockTxIDs[txi]
-				addToAddressesMap(addresses, tai.BcashToken.Category, spendingTxid, ^int32(i))
+				spendingTxid := (*blockTxIDs)[txi]
 
-				if tokenTxsMap[tai.BcashToken.Category] == nil {
-					tokenTxsMap[tai.BcashToken.Category] = make(map[string]bool)
+				sCategory := string(tai.BcashToken.Category)
+				addToAddressesMap(addresses, sCategory, spendingTxid, ^int32(i))
+
+				if tokenTxsMap[sCategory] == nil {
+					tokenTxsMap[sCategory] = make(map[string]bool)
 				}
-				tokenTxsMap[tai.BcashToken.Category][stxID] = true
+				tokenTxsMap[sCategory][stxID] = true
 
 				if tai.BcashToken.Nft != nil {
-					spentCommitments[tai.BcashToken.Nft.Commitment] = true
+					if spentCommitments[sCategory] == nil {
+						spentCommitments[sCategory] = make(map[string]bool)
+					}
+					spentCommitments[sCategory][string(tai.BcashToken.Nft.Commitment)] = true
 				}
-			}
-		}
-
-		for commitment := range spentCommitments {
-			if createdCommitments[commitment] {
-				delete(spentCommitments, commitment)
-				delete(createdCommitments, commitment)
 			}
 		}
 	}
 
-	for category, txs := range tokenTxsMap {
-		bcashToken, e := bcashTokens[category]
+	for sCategory, txs := range tokenTxsMap {
+		bcashToken, e := bcashTokens[sCategory]
 		if !e {
-			bcashToken, err := d.GetBcashToken(category)
+			bcashToken, err := d.GetBcashToken([]byte(sCategory))
 			if err != nil {
 				return err
 			}
@@ -992,44 +1003,61 @@ func (d *RocksDB) processAddressesBitcoinType(block *bchain.Block, addresses add
 					Standard: bchain.CashToken,
 				}
 			}
-			bcashTokens[category] = bcashToken
+			bcashTokens[sCategory] = bcashToken
 			d.cbs.bcashTokensMiss++
 		} else {
 			d.cbs.bcashTokensHit++
 		}
 
-		bcashToken, _ = bcashTokens[category]
+		bcashToken, _ = bcashTokens[sCategory]
 
 		bcashToken.Txs += uint(len(txs))
-		if genesisSupplyMap[category] > 0 {
+		if genesisSupplyMap[sCategory] > 0 {
 			var gs big.Int
-			gs.SetUint64(genesisSupplyMap[category])
+			gs.SetUint64(genesisSupplyMap[sCategory])
 			bcashToken.GenesisSupply.Set(&gs)
 		}
 
 		updated := false
-		for commitment := range spentCommitments {
-			for i, c := range bcashToken.Commitments {
-				if c == commitment {
-					// Remove the commitment from the slice
-					bcashToken.Commitments = append(bcashToken.Commitments[:i], bcashToken.Commitments[i+1:]...)
-					updated = true
-					break
+		// Remove commitments that were both created and spent in this block
+		if created, spent := createdCommitments[sCategory], spentCommitments[sCategory]; created != nil && spent != nil {
+			for commitment := range spent {
+				if created[commitment] {
+					delete(spent, commitment)
+					delete(created, commitment)
 				}
 			}
 		}
 
-		for commitment := range createdCommitments {
-			if !spentCommitments[commitment] {
-				bcashToken.Commitments = append(bcashToken.Commitments, commitment)
+		// Remove spent commitments from bcashToken.Commitments efficiently
+		if spent := spentCommitments[sCategory]; len(spent) > 0 && len(bcashToken.Commitments) > 0 {
+			commitments := bcashToken.Commitments[:0]
+			for _, c := range bcashToken.Commitments {
+				if !spent[string(c)] {
+					commitments = append(commitments, c)
+				}
+			}
+			if len(commitments) != len(bcashToken.Commitments) {
+				bcashToken.Commitments = commitments
 				updated = true
 			}
 		}
 
-		if updated {
+		// Add new commitments that were created but not spent
+		if created := createdCommitments[sCategory]; created != nil {
+			for commitment := range created {
+				if spentCommitments[sCategory] == nil || !spentCommitments[sCategory][commitment] {
+					bcashToken.Commitments = append(bcashToken.Commitments, []byte(commitment))
+					updated = true
+				}
+			}
+		}
+
+		if updated && len(bcashToken.Commitments) > 1 {
+			// sort by length and then alphabetically
 			sort.Slice(bcashToken.Commitments, func(i, j int) bool {
 				if len(bcashToken.Commitments[i]) == len(bcashToken.Commitments[j]) {
-					return bcashToken.Commitments[i] < bcashToken.Commitments[j]
+					return bytes.Compare(bcashToken.Commitments[i], bcashToken.Commitments[j]) < 0
 				}
 				return len(bcashToken.Commitments[i]) < len(bcashToken.Commitments[j])
 			})
@@ -1304,7 +1332,7 @@ func (d *RocksDB) appendTxInput(txi *TxInput, buf []byte, varBuf []byte) []byte 
 		l = packBigint(&txi.ValueSat, varBuf)
 		buf = append(buf, varBuf[:l]...)
 
-		if strings.HasSuffix(d.is.CoinShortcut, "BCH") {
+		if d.is.IsBCH() {
 			if txi.BcashToken == nil {
 				l := packVarint(0, varBuf)
 				buf = append(buf, varBuf[:l]...)
@@ -1335,7 +1363,7 @@ func (d *RocksDB) appendTxInput(txi *TxInput, buf []byte, varBuf []byte) []byte 
 		l = packBigint(&txi.ValueSat, varBuf)
 		buf = append(buf, varBuf[:l]...)
 
-		if strings.HasSuffix(d.is.CoinShortcut, "BCH") {
+		if d.is.IsBCH() {
 			if txi.BcashToken == nil {
 				l := packVarint(0, varBuf)
 				buf = append(buf, varBuf[:l]...)
@@ -1361,7 +1389,7 @@ func (d *RocksDB) appendTxOutput(txo *TxOutput, buf []byte, varBuf []byte) []byt
 	l = packBigint(&txo.ValueSat, varBuf)
 	buf = append(buf, varBuf[:l]...)
 
-	if strings.HasSuffix(d.is.CoinShortcut, "BCH") {
+	if d.is.IsBCH() {
 		if txo.BcashToken == nil {
 			l := packVarint(0, varBuf)
 			buf = append(buf, varBuf[:l]...)
@@ -1415,7 +1443,7 @@ func (d *RocksDB) unpackAddrBalance(buf []byte, txidUnpackedLen int, detail Addr
 			valueSat, ll := unpackBigint(buf[l:])
 			l += ll
 
-			if strings.HasSuffix(d.is.CoinShortcut, "BCH") && len(buf[l:]) > 0 {
+			if d.is.IsBCH() && len(buf[l:]) > 0 {
 				tokenLen, tl := unpackVarint(buf[l:])
 				l += tl
 				var err error
@@ -1463,7 +1491,7 @@ func (d *RocksDB) packAddrBalance(ab *AddrBalance, buf, varBuf []byte) []byte {
 			l = packBigint(&utxo.ValueSat, varBuf)
 			buf = append(buf, varBuf[:l]...)
 
-			if strings.HasSuffix(d.is.CoinShortcut, "BCH") && len(buf[l:]) > 0 {
+			if d.is.IsBCH() && len(buf[l:]) > 0 {
 				if utxo.BcashToken == nil {
 					l := packVarint(0, varBuf)
 					buf = append(buf, varBuf[:l]...)
@@ -1516,7 +1544,7 @@ func (d *RocksDB) unpackTxInput(ti *TxInput, buf []byte) int {
 		ti.ValueSat, l = unpackBigint(buf[al:])
 		al += l
 
-		if strings.HasSuffix(d.is.CoinShortcut, "BCH") && len(buf[al:]) > 0 {
+		if d.is.IsBCH() && len(buf[al:]) > 0 {
 			tokenLen, tl := unpackVarint(buf[al:])
 			al += tl
 			if tokenLen > 0 && len(buf[al:]) >= tokenLen {
@@ -1545,7 +1573,7 @@ func (d *RocksDB) unpackTxInput(ti *TxInput, buf []byte) int {
 		ti.ValueSat, l = unpackBigint(buf[al:])
 		al += uint(l)
 
-		if strings.HasSuffix(d.is.CoinShortcut, "BCH") && len(buf[al:]) > 0 {
+		if d.is.IsBCH() && len(buf[al:]) > 0 {
 			tokenLen, tl := unpackVarint(buf[al:])
 			al += uint(tl)
 			if tokenLen > 0 && len(buf[l:]) >= tokenLen {
@@ -1572,7 +1600,7 @@ func (d *RocksDB) unpackTxOutput(to *TxOutput, buf []byte) int {
 	to.ValueSat, l = unpackBigint(buf[al:])
 	al += l
 
-	if strings.HasSuffix(d.is.CoinShortcut, "BCH") && len(buf[al:]) > 0 {
+	if d.is.IsBCH() && len(buf[al:]) > 0 {
 		tokenLen, tl := unpackVarint(buf[al:])
 		al += tl
 		if tokenLen > 0 && len(buf[al:]) >= tokenLen {
@@ -2816,27 +2844,6 @@ func unpackString(buf []byte) (string, int) {
 	sl, l := unpackVaruint(buf)
 	so := l + int(sl)
 	s := string(buf[l:so])
-	return s, so
-}
-
-func packHexString(s string) []byte {
-	bin, err := hex.DecodeString(s)
-	if err != nil {
-		return nil
-	}
-	varBuf := make([]byte, vlq.MaxLen64)
-	l := len(bin)
-	i := packVaruint(uint(l), varBuf)
-	buf := make([]byte, 0, i+l)
-	buf = append(buf, varBuf[:i]...)
-	buf = append(buf, bin...)
-	return buf
-}
-
-func unpackHexString(buf []byte) (string, int) {
-	sl, l := unpackVaruint(buf)
-	so := l + int(sl)
-	s := hex.EncodeToString(buf[l:so])
 	return s, so
 }
 
