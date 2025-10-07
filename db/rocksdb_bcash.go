@@ -254,13 +254,14 @@ func (d *RocksDB) GetAllBcashTokenMetaQueue() ([]*BcashTokenMetaQueue, error) {
 }
 
 func (d *RocksDB) StoreBcashTokenMetaQueue(wb *grocksdb.WriteBatch, metas []*BcashTokenMetaQueue) error {
-	buf := make([]byte, 34)
+	keyBuf := make([]byte, 34)
+	dataBuf := make([]byte, 9)
 	for _, meta := range metas {
 		if meta == nil {
 			return errors.New("Invalid meta, nil")
 		}
-		key := PackBcashTokenMetaQueueKey(meta, buf)
-		data := PackBcashTokenMetaQueue(meta, buf)
+		key := PackBcashTokenMetaQueueKey(meta, keyBuf)
+		data := PackBcashTokenMetaQueue(meta, dataBuf)
 		wb.PutCF(d.cfh[cfBcashTokenMetaQueue], key, data)
 	}
 	return nil

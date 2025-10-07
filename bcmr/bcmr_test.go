@@ -69,7 +69,7 @@ func getRegistry(url string) (*Registry, error) {
 
 func Test_download(t *testing.T) {
 	registry, _ := getRegistry("https://bcmr.paytaca.com/api/registries/cade35f821c314c4f16de1f99484deb47e0320a688e2557a7f0a7d865371d695:1/")
-	// println(err.Error())
+
 	for _, identity := range *registry.Identities {
 		for _, revision := range identity {
 			for token_id, token := range revision.Token.Nfts.Parse.Types {
