@@ -91,6 +91,9 @@ const (
 
 	// BCH specific
 	cfBcashTokens
+	cfBcashTokenMetaQueue
+	cfBcashTokenMeta
+	cfBcashTokenNftMeta
 
 	__break__
 
@@ -110,7 +113,7 @@ var cfNames []string
 var cfBaseNames = []string{"default", "height", "addresses", "blockTxs", "transactions", "fiatRates"}
 
 // type specific columns
-var cfNamesBitcoinType = []string{"addressBalance", "txAddresses", "blockFilter", "bcashTokens"}
+var cfNamesBitcoinType = []string{"addressBalance", "txAddresses", "blockFilter", "bcashTokens", "bcashTokenMetaQueue", "bcashTokenMeta", "bcashTokenNftMeta"}
 var cfNamesEthereumType = []string{"addressContracts", "internalData", "contracts", "functionSignatures", "blockInternalDataErrors", "addressAliases"}
 
 func openDB(path string, c *grocksdb.Cache, openFiles int) (*grocksdb.DB, []*grocksdb.ColumnFamilyHandle, error) {
@@ -418,110 +421,6 @@ func (d *RocksDB) ConnectBlock(block *bchain.Block) error {
 	avg := d.is.SetBlockTime(block.Height, uint32(block.Time))
 	if d.metrics != nil {
 		d.metrics.AvgBlockPeriod.Set(float64(avg))
-	}
-	return nil
-}
-
-// BcashToken index
-type BcashToken struct {
-	Standard      bchain.TokenStandard
-	Txs           uint
-	GenesisSupply big.Int
-	Commitments   [][]byte
-}
-
-func packBcashToken(token *BcashToken, buf []byte, varBuf []byte) []byte {
-	buf = buf[:0]
-	if token == nil {
-		return buf
-	}
-
-	// Txs
-	l := packVaruint(uint(token.Txs), varBuf)
-	buf = append(buf, varBuf[:l]...)
-
-	// GenesisSupply
-	l = packBigint(&token.GenesisSupply, varBuf)
-	buf = append(buf, varBuf[:l]...)
-
-	// Commitments (as varuint count, then for each: varuint length + bytes)
-	l = packVaruint(uint(len(token.Commitments)), varBuf)
-	buf = append(buf, varBuf[:l]...)
-	for _, c := range token.Commitments {
-		cBytes := packString(string(c))
-		buf = append(buf, cBytes...)
-	}
-
-	return buf
-}
-
-func unpackBcashToken(buf []byte) (*BcashToken, int, error) {
-	if len(buf) == 0 {
-		return nil, 0, nil
-	}
-
-	token := BcashToken{
-		Standard: bchain.CashToken,
-	}
-	var al int
-
-	// Txs
-	txs, l := unpackVaruint(buf[al:])
-	al += l
-	token.Txs = uint(txs)
-
-	// GenesisSupply
-	genesisSupply, l := unpackBigint(buf[al:])
-	al += l
-	token.GenesisSupply = genesisSupply
-
-	// Commitments
-	commitmentsCount, l := unpackVaruint(buf[al:])
-	al += l
-	token.Commitments = make([][]byte, commitmentsCount)
-	for i := range commitmentsCount {
-		commitment, ll := unpackString(buf[al:])
-		al += ll
-		token.Commitments[i] = []byte(commitment)
-	}
-
-	return &token, al, nil
-}
-
-// GetBcashToken returns the BcashToken for a given category or nil if not found.
-func (d *RocksDB) GetBcashToken(category []byte) (*BcashToken, error) {
-	if len(category) != 32 {
-		return nil, errors.New("Invalid category")
-	}
-	val, err := d.db.GetCF(d.ro, d.cfh[cfBcashTokens], category)
-	if err != nil {
-		return nil, err
-	}
-	defer val.Free()
-	data := val.Data()
-	token, _, err := unpackBcashToken(data)
-	if err != nil {
-		return nil, err
-	}
-	return token, nil
-}
-
-// storeBcashTokens stores BcashToken data in the database.
-func (d *RocksDB) storeBcashTokens(wb *grocksdb.WriteBatch, tokens map[string]*BcashToken) error {
-	varBuf := make([]byte, maxPackedBigintBytes)
-	buf := make([]byte, 1024)
-	for category, token := range tokens {
-		key := []byte(category)
-		if len(key) != 32 {
-			glog.Warningf("rocksdb: bcash token invalid category %s", hex.EncodeToString(key))
-			continue
-		}
-		if token == nil {
-			wb.DeleteCF(d.cfh[cfBcashTokens], key)
-		} else {
-			buf = packBcashToken(token, buf, varBuf)
-			wb.PutCF(d.cfh[cfBcashTokens], key, buf)
-		}
 	}
 	return nil
 }
@@ -909,159 +808,6 @@ func (d *RocksDB) processAddressesBitcoinType(block *bchain.Block, addresses add
 	err := d.processBcashTokens(block, addresses, bcashTokens, &blockTxIDs, blockTxAddresses)
 	if err != nil {
 		return err
-	}
-
-	return nil
-}
-
-func (d *RocksDB) processBcashTokens(block *bchain.Block, addresses addressesMap, bcashTokens map[string]*BcashToken, blockTxIDs *[][]byte, blockTxAddresses []*TxAddresses) error {
-	// TODO: extract CashTokens activation height to chain params
-	if !d.is.IsBCH() || block.Height <= 792772 {
-		return nil
-	}
-
-	// process bcash token data
-	genesisSupplyMap := make(map[string]uint64)
-	tokenTxsMap := make(map[string]map[string]bool)
-	spentCommitments := make(map[string]map[string]bool)
-	createdCommitments := make(map[string]map[string]bool)
-
-	for txi := range block.Txs {
-		tx := &block.Txs[txi]
-		stxID := tx.Txid
-		ta := blockTxAddresses[txi]
-		for i := range ta.Outputs {
-			tao := &ta.Outputs[i]
-			if tao.BcashToken != nil {
-				btxID, err := d.chainParser.PackTxid(tx.Txid)
-				if err != nil {
-					return err
-				}
-
-				sCategory := string(tao.BcashToken.Category)
-				addToAddressesMap(addresses, sCategory, btxID, int32(i))
-
-				if tokenTxsMap[sCategory] == nil {
-					tokenTxsMap[sCategory] = make(map[string]bool)
-				}
-				tokenTxsMap[sCategory][string(stxID)] = true
-
-				if tao.BcashToken.Nft != nil {
-					if createdCommitments[sCategory] == nil {
-						createdCommitments[sCategory] = make(map[string]bool)
-					}
-					createdCommitments[sCategory][string(tao.BcashToken.Nft.Commitment)] = true
-				}
-
-				// Check if there are no inputs with this output token category
-				hasInputWithCategory := false
-				for _, input := range ta.Inputs {
-					if input.BcashToken != nil && bytes.Equal(input.BcashToken.Category, tao.BcashToken.Category) {
-						hasInputWithCategory = true
-						break
-					}
-				}
-				if !hasInputWithCategory {
-					// No input with this token category, treat as genesis supply
-					genesisSupplyMap[sCategory] += tao.BcashToken.Amount.AsUint64()
-				}
-			}
-		}
-
-		for i := range ta.Inputs {
-			tai := &ta.Inputs[i]
-			if tai.BcashToken != nil {
-				spendingTxid := (*blockTxIDs)[txi]
-
-				sCategory := string(tai.BcashToken.Category)
-				addToAddressesMap(addresses, sCategory, spendingTxid, ^int32(i))
-
-				if tokenTxsMap[sCategory] == nil {
-					tokenTxsMap[sCategory] = make(map[string]bool)
-				}
-				tokenTxsMap[sCategory][stxID] = true
-
-				if tai.BcashToken.Nft != nil {
-					if spentCommitments[sCategory] == nil {
-						spentCommitments[sCategory] = make(map[string]bool)
-					}
-					spentCommitments[sCategory][string(tai.BcashToken.Nft.Commitment)] = true
-				}
-			}
-		}
-	}
-
-	for sCategory, txs := range tokenTxsMap {
-		bcashToken, e := bcashTokens[sCategory]
-		if !e {
-			bcashToken, err := d.GetBcashToken([]byte(sCategory))
-			if err != nil {
-				return err
-			}
-			if bcashToken == nil {
-				bcashToken = &BcashToken{
-					Standard: bchain.CashToken,
-				}
-			}
-			bcashTokens[sCategory] = bcashToken
-			d.cbs.bcashTokensMiss++
-		} else {
-			d.cbs.bcashTokensHit++
-		}
-
-		bcashToken, _ = bcashTokens[sCategory]
-
-		bcashToken.Txs += uint(len(txs))
-		if genesisSupplyMap[sCategory] > 0 {
-			var gs big.Int
-			gs.SetUint64(genesisSupplyMap[sCategory])
-			bcashToken.GenesisSupply.Set(&gs)
-		}
-
-		updated := false
-		// Remove commitments that were both created and spent in this block
-		if created, spent := createdCommitments[sCategory], spentCommitments[sCategory]; created != nil && spent != nil {
-			for commitment := range spent {
-				if created[commitment] {
-					delete(spent, commitment)
-					delete(created, commitment)
-				}
-			}
-		}
-
-		// Remove spent commitments from bcashToken.Commitments efficiently
-		if spent := spentCommitments[sCategory]; len(spent) > 0 && len(bcashToken.Commitments) > 0 {
-			commitments := bcashToken.Commitments[:0]
-			for _, c := range bcashToken.Commitments {
-				if !spent[string(c)] {
-					commitments = append(commitments, c)
-				}
-			}
-			if len(commitments) != len(bcashToken.Commitments) {
-				bcashToken.Commitments = commitments
-				updated = true
-			}
-		}
-
-		// Add new commitments that were created but not spent
-		if created := createdCommitments[sCategory]; created != nil {
-			for commitment := range created {
-				if spentCommitments[sCategory] == nil || !spentCommitments[sCategory][commitment] {
-					bcashToken.Commitments = append(bcashToken.Commitments, []byte(commitment))
-					updated = true
-				}
-			}
-		}
-
-		if updated && len(bcashToken.Commitments) > 1 {
-			// sort by length and then alphabetically
-			sort.Slice(bcashToken.Commitments, func(i, j int) bool {
-				if len(bcashToken.Commitments[i]) == len(bcashToken.Commitments[j]) {
-					return bytes.Compare(bcashToken.Commitments[i], bcashToken.Commitments[j]) < 0
-				}
-				return len(bcashToken.Commitments[i]) < len(bcashToken.Commitments[j])
-			})
-		}
 	}
 
 	return nil
@@ -2801,6 +2547,16 @@ func packUint(i uint32) []byte {
 
 func unpackUint(buf []byte) uint32 {
 	return binary.BigEndian.Uint32(buf)
+}
+
+func packUint16(i uint16) []byte {
+	buf := make([]byte, 2)
+	binary.BigEndian.PutUint16(buf, i)
+	return buf
+}
+
+func unpackUint16(buf []byte) uint16 {
+	return binary.BigEndian.Uint16(buf)
 }
 
 func packVarint32(i int32, buf []byte) int {

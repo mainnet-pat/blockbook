@@ -2017,3 +2017,183 @@ func Test_packBcashToken_unpackBcashToken(t *testing.T) {
 		})
 	}
 }
+
+func Test_packBcashTokenMetaQueue_unpackBcashTokenMetaQueue(t *testing.T) {
+	parser := bcashTestnetParser()
+	d := getRocksDb(parser, false, t).setCoinShortcut("BCH")
+	defer closeAndDestroyRocksDB(t, d)
+
+	tests := []struct {
+		name     string
+		meta     *BcashTokenMetaQueue
+		wantErr  bool
+		wantErrR bool
+	}{
+		{
+			name:    "meta is nil",
+			meta:    nil,
+			wantErr: true,
+		},
+		{
+			name: "valid meta",
+			meta: &BcashTokenMetaQueue{
+				TxId:    hexToBytes("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"),
+				Height:  1,
+				Txi:     1,
+				Vout:    1,
+				Retries: 1,
+			},
+		},
+		{
+			name: "invalid meta",
+			meta: &BcashTokenMetaQueue{
+				TxId:    hexToBytes("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbaa"),
+				Vout:    1,
+				Retries: 1,
+			},
+			wantErrR: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			wb := grocksdb.NewWriteBatch()
+			defer wb.Destroy()
+
+			queue := make([]*BcashTokenMetaQueue, 0)
+			queue = append(queue, tt.meta)
+			err := d.StoreBcashTokenMetaQueue(wb, queue)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("StoreBcashTokenMetaQueue() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr {
+				return
+			}
+
+			if err := d.WriteBatch(wb); err != nil {
+				t.Errorf("WriteBatch() error = %v", err)
+			}
+
+			got, err := d.GetAllBcashTokenMetaQueue()
+
+			if tt.wantErrR {
+				return
+			}
+
+			if err != nil {
+				t.Errorf("GetAllBcashTokenMetaQueue() error = %+v", err)
+				return
+			}
+
+			if !reflect.DeepEqual(got, queue) {
+				t.Errorf("GetAllBcashTokenMetaQueue() = %+v, want %+v", got[0], queue[0])
+			}
+
+			d.RemoveBcashTokenMetaQueue(wb, queue)
+			if err := d.WriteBatch(wb); err != nil {
+				t.Errorf("WriteBatch() error = %v", err)
+			}
+		})
+	}
+}
+
+func Test_packBcashTokenMeta_unpackBcashTokenMeta(t *testing.T) {
+	parser := bcashTestnetParser()
+	d := getRocksDb(parser, false, t).setCoinShortcut("BCH")
+	defer closeAndDestroyRocksDB(t, d)
+
+	tests := []struct {
+		name    string
+		meta    *BcashTokenMeta
+		wantErr bool
+	}{
+		{
+			name:    "meta is nil",
+			meta:    nil,
+			wantErr: false,
+		},
+		{
+			name: "valid meta",
+			meta: &BcashTokenMeta{
+				Name:        "Name",
+				Symbol:      "SYM",
+				Decimals:    8,
+				Description: "Description",
+				Website:     "https://example.com",
+				Icon:        "https://example.com/icon.png",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			buf := make([]byte, 1024)
+			b := packBcashTokenMeta(tt.meta, buf)
+
+			got1, l, err := unpackBcashTokenMeta(b)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("unpackBcashTokenMeta() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if l != len(b) && !tt.wantErr {
+				t.Errorf("unpackBcashTokenMeta() len = %v, want %v", l, len(b))
+			}
+			if tt.wantErr {
+				return
+			}
+			if !reflect.DeepEqual(got1, tt.meta) {
+				t.Errorf("unpackBcashTokenMeta() = %+v, want %+v", got1, tt.meta)
+			}
+		})
+	}
+}
+
+func Test_packBcashTokenNftMeta_unpackBcashTokenNftMeta(t *testing.T) {
+	parser := bcashTestnetParser()
+	d := getRocksDb(parser, false, t).setCoinShortcut("BCH")
+	defer closeAndDestroyRocksDB(t, d)
+
+	tests := []struct {
+		name    string
+		meta    *BcashTokenNftMeta
+		wantErr bool
+	}{
+		{
+			name:    "meta is nil",
+			meta:    nil,
+			wantErr: false,
+		},
+		{
+			name: "valid meta",
+			meta: &BcashTokenNftMeta{
+				Name:        "Name",
+				Description: "Description",
+				Icon:        "https://example.com/icon.png",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			buf := make([]byte, 1024)
+			b := packBcashTokenNftMeta(tt.meta, buf)
+
+			got1, l, err := unpackBcashTokenNftMeta(b)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("unpackBcashTokeNftnMeta() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if l != len(b) && !tt.wantErr {
+				t.Errorf("unpackBcashTokenNftMeta() len = %v, want %v", l, len(b))
+			}
+			if tt.wantErr {
+				return
+			}
+			if !reflect.DeepEqual(got1, tt.meta) {
+				t.Errorf("unpackBcashTokenNftMeta() = %+v, want %+v", got1, tt.meta)
+			}
+		})
+	}
+}
