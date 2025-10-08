@@ -125,17 +125,32 @@
                     <tbody>
                         <tr>
                             <th style="width: 25%;">Category</th>
-                            <th class="text-end" style="width: 20%;">Quantity</th>
+                            <th class="text-end" style="width: 20%;">Fungible Amount</th>
                             <th class="text-end" style="width: 35%;">Commitments</th>
                             <th class="text-end" style="width: 20%;">Value</th>
                         </tr>
                         {{range $t := $addr.Tokens}}
                         {{if eq $t.Standard $.CashTokenName}}
                         <tr>
-                            <td class="ellipsis"><a href="/token/{{$t.Category}}">{{if $t.Name}}<span class="copyable" cc="{{$t.Category}}" alias-type="Category">{{$t.Name}}</span>{{else}}<span class="copyable">{{$t.Category}}</span>{{end}}</a></td>
+                            <td class="ellipsis">
+{{if $t.Icon}}<img onerror="this.style.display='none'" style="width: 32px; height: 32px;" src="{{$t.Icon}}" />{{end}}
+<a href="/token/{{$t.Category}}">{{if $t.Name}}<span class="copyable" cc="{{$t.Category}}" alias-type="Category">{{$t.Name}}</span>{{else}}<span class="copyable">{{$t.Category}}</span>{{end}}</a>
+</td>
                             <td class="text-end">{{formattedAmountSpan $t.BalanceSat $t.Decimals $t.Symbol $data "copyable"}}</td>
                             <td class="text-end">
-                                {{range $i, $iv := $t.Commitments}}{{if $i}}, {{end}}<a href="/nft/{{$t.Category}}/{{$iv}}">{{$iv}}</a>{{end}}
+                                {{range $i, $iv := $t.Commitments}}
+                                    {{if $i}}, {{end}}
+                                    <a href="/nft/{{$t.Category}}/{{$iv}}">
+                                        {{if $t.Nfts}}
+                                            <span class="copyable" cc="{{$iv}}" alias-type="Commitment">
+                                                {{if (index $t.Nfts $iv).Icon}}<img onerror="this.style.display='none'" style="width: 24px; height: 24px;" src="{{(index $t.Nfts $iv).Icon}}" />{{end}}
+                                                {{(index $t.Nfts $iv).Name}}
+                                            </span>
+                                        {{else}}
+                                            {{$iv}}
+                                        {{end}}
+                                    </a>
+                                {{end}}
                             </td>
                             <td class="text-end">{{summaryValuesSpan $t.BaseValue $t.SecondaryValue $data}}</span></td>
                         </tr>

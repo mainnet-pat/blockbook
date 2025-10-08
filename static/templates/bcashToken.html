@@ -32,17 +32,40 @@
             <td>{{$data.Symbol}}</td>
         </tr>
 {{end}}
+{{if $data.Decimals}}
+        <tr>
+            <td>Decimals</td>
+            <td>{{$data.Decimals}}</td>
+        </tr>
+{{end}}
 {{if $data.Description}}
         <tr>
             <td>Description</td>
             <td>{{$data.Description}}</td>
         </tr>
 {{end}}
+{{if $data.URI}}
+        <tr>
+            <td>Website</td>
+            <td><a href="{{$data.URI}}">{{$data.URI}}</a></td>
+        </tr>
+{{end}}
 {{if $data.Commitments}}
         <tr>
             <td>Commitments</td>
             <td class="text-end">
-                {{range $i, $iv := $data.Commitments}}{{if $i}}, {{end}}<a href="/nft/{{$data.Category}}/{{$iv}}">{{$iv}}</a>{{end}}
+                {{range $i, $iv := $data.Commitments}}{{if $i}}, {{end}}
+                    <a href="/nft/{{$data.Category}}/{{$iv}}">
+                        {{if $data.Nfts}}
+                            <span class="copyable" cc="{{$iv}}" alias-type="Commitment">
+                                {{if (index $data.Nfts $iv).Icon}}<img onerror="this.style.display='none'" style="width: 24px; height: 24px;" src="{{(index $data.Nfts $iv).Icon}}" />{{end}}
+                                {{(index $data.Nfts $iv).Name}}
+                            </span>
+                        {{else}}
+                            {{$iv}}
+                        {{end}}
+                    </a>
+                {{end}}
             </td>
         </tr>
 {{end}}
@@ -59,7 +82,7 @@
 </div>
 <div class="col-md-6 mt-4" id="image">
 {{if $data.ImageURL}}
-    <img class="border w-100 bg-white" style="max-height: 192px; border-radius: 20px; padding: 10px;" src="{{$data.ImageURL}}">
+    <img class="border w-100 bg-white" style="border-radius: 20px; padding: 10px;" src="{{$data.ImageURL}}">
 {{end}}
 </div>
 </div>

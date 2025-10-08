@@ -609,9 +609,9 @@ func (d *RocksDB) RemoveAllBcashTokenMeta(wb *grocksdb.WriteBatch, category []by
 
 // BcashTokenNftMeta index
 type BcashTokenNftMeta struct {
-	Name        string
-	Description string
-	Icon        string
+	Name        string `json:"name,omitempty"`
+	Description string `json:"description,omitempty"`
+	Icon        string `json:"icon,omitempty"`
 }
 
 func packBcashTokenNftMeta(meta *BcashTokenNftMeta, buf []byte) []byte {

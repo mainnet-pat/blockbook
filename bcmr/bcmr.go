@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"net/http"
 	"sort"
 	"strings"
@@ -21,7 +22,7 @@ import (
 type BcmrDownloader struct {
 	periodSeconds int64
 	db            *db.RocksDB
-	provider      string
+	provider      string // BCMR indexer deployment from https://github.com/paytaca/bcmr-indexer
 	mux           sync.RWMutex
 }
 
@@ -77,13 +78,15 @@ func NewBcmrDownloader(d *db.RocksDB, config *common.Config, metrics *common.Met
 func (bd *BcmrDownloader) RunDownloader() error {
 	glog.Infof("Starting BCMR downloader...")
 
-	next := time.Now().Unix() + 5
 	for {
 		unix := time.Now().Unix()
-		if unix < next {
+		next := unix + bd.periodSeconds
+		next -= next % bd.periodSeconds
+
+		if next-unix < bd.periodSeconds {
+			next += int64(rand.Intn(3))
 			time.Sleep(time.Duration(next-unix) * time.Second)
 		}
-		next = unix + bd.periodSeconds
 
 		metaQueue, err := bd.db.GetAllBcashTokenMetaQueue()
 		glog.Infof("BCMR metadata download queue has %d items", len(metaQueue))

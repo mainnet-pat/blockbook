@@ -295,18 +295,35 @@ func (w *Worker) GetAddrDescAndTokenFromVout(vout *bchain.Vout) (bchain.AddressD
 	return addrDesc, nil, err
 }
 
-func (w *Worker) GetAddressesAndTokenFromAddrDesc(addrDesc bchain.AddressDescriptor) (bchain.AddressDescriptor, []string, bool, *bchain.BcashToken, error) {
+func (w *Worker) GetAddressesAndTokenFromAddrDesc(addrDesc bchain.AddressDescriptor) (bchain.AddressDescriptor, []string, bool, *BcashToken, error) {
 	if w.is.IsBCH() {
-		return bch.GetAddressesAndTokenFromAddrDesc(w.chainParser, addrDesc)
+		addrDescRet, addresses, isAddress, bcashToken, err := bch.GetAddressesAndTokenFromAddrDesc(w.chainParser, addrDesc)
+		if err != nil {
+			return addrDescRet, addresses, isAddress, nil, err
+		}
+		apiBcashToken, err := w.convertToApiBcashToken(bcashToken)
+		if err != nil {
+			return addrDescRet, addresses, isAddress, nil, err
+		}
+
+		return addrDescRet, addresses, isAddress, apiBcashToken, nil
 	}
 
 	addresses, isAddress, err := w.chainParser.GetAddressesFromAddrDesc(addrDesc)
 	return addrDesc, addresses, isAddress, nil, err
 }
 
-func (w *Worker) GetAddressesAndTokenFromVout(vout *bchain.Vout) (bchain.AddressDescriptor, []string, bool, *bchain.BcashToken, error) {
+func (w *Worker) GetAddressesAndTokenFromVout(vout *bchain.Vout) (bchain.AddressDescriptor, []string, bool, *BcashToken, error) {
 	if w.is.IsBCH() {
-		return bch.GetAddressesAndTokenFromVout(w.chainParser, vout)
+		addrDescRet, addresses, isAddress, bcashToken, err := bch.GetAddressesAndTokenFromVout(w.chainParser, vout)
+		if err != nil {
+			return addrDescRet, addresses, isAddress, nil, err
+		}
+		apiBcashToken, err := w.convertToApiBcashToken(bcashToken)
+		if err != nil {
+			return addrDescRet, addresses, isAddress, nil, err
+		}
+		return addrDescRet, addresses, isAddress, apiBcashToken, nil
 	}
 
 	addrDesc, addresses, isAddress, err := w.getAddressesFromVout(vout)
@@ -393,7 +410,12 @@ func (w *Worker) getTransactionFromBchainTx(bchainTx *bchain.Tx, height int, spe
 						vin.ValueSat = (*Amount)(&output.ValueSat)
 						vin.AddrDesc = output.AddrDesc
 						vin.Addresses, vin.IsAddress, err = output.Addresses(w.chainParser)
-						vin.BcashToken = output.BcashToken
+						if output.BcashToken != nil {
+							vin.BcashToken, err = w.convertToApiBcashToken(output.BcashToken)
+							if err != nil {
+								return nil, errors.Annotatef(err, "convertToApiBcashToken %v", output.BcashToken)
+							}
+						}
 						if err != nil {
 							glog.Errorf("output.Addresses error %v, tx %v, output %v", err, bchainVin.Txid, i)
 						}
@@ -638,11 +660,6 @@ func (w *Worker) GetTransactionFromMempoolTx(mempoolTx *bchain.MempoolTx) (*Tx, 
 		}
 	}
 
-	// bcashSpecific, err := w.bcashPostProcessApiTx(mempoolTx.Txid, &vins, &vouts)
-	// if err != nil {
-	// 	return nil, errors.Annotatef(err, "bcashPostProcessApiTx %v", mempoolTx.Txid)
-	// }
-
 	r := &Tx{
 		Blocktime:        mempoolTx.Blocktime,
 		FeesSat:          (*Amount)(&feesSat),
@@ -660,7 +677,6 @@ func (w *Worker) GetTransactionFromMempoolTx(mempoolTx *bchain.MempoolTx) (*Tx, 
 		TokenTransfers:   tokens,
 		EthereumSpecific: ethSpecific,
 		AddressAliases:   w.getAddressAliases(addresses),
-		// BcashSpecific:    bcashSpecific,
 	}
 	r.ConfirmationETASeconds, r.ConfirmationETABlocks = w.getConfirmationETA(r)
 	return r, nil
@@ -918,6 +934,47 @@ func GetUniqueTxids(txids []string) []string {
 	return ut[0:i]
 }
 
+func (w *Worker) convertToApiBcashToken(t *bchain.BcashToken) (*BcashToken, error) {
+	var r *BcashToken = nil
+	if t != nil {
+		r = &BcashToken{
+			Category: hex.EncodeToString(t.Category),
+			Amount:   (Amount)(t.Amount.AsBigInt()),
+		}
+
+		tokenMeta, err := w.db.GetBcashTokenMeta(t.Category)
+		if err != nil {
+			return nil, errors.Annotatef(err, "GetBcashTokenMeta %x", t.Category)
+		}
+		if tokenMeta != nil {
+			r.Name = tokenMeta.Name
+			r.Description = tokenMeta.Description
+			r.Symbol = tokenMeta.Symbol
+			r.Decimals = int(tokenMeta.Decimals)
+			r.Website = tokenMeta.Website
+			r.Icon = tokenMeta.Icon
+		}
+
+		if t.Nft != nil {
+			r.Nft = &BcashTokenNft{
+				Capability: string(t.Nft.Capability),
+				Commitment: hex.EncodeToString(t.Nft.Commitment),
+			}
+
+			tokenNftMeta, err := w.db.GetBcashTokenNftMeta(t.Category, t.Nft.Commitment)
+			if err != nil {
+				return nil, errors.Annotatef(err, "GetBcashTokenNftMeta %x %x", t.Category, t.Nft.Commitment)
+			}
+			if tokenNftMeta != nil {
+				r.Nft.Name = tokenNftMeta.Name
+				r.Nft.Description = tokenNftMeta.Description
+				r.Nft.Icon = tokenNftMeta.Icon
+			}
+		}
+	}
+	return r, nil
+}
+
 func (w *Worker) txFromTxAddress(txid string, ta *db.TxAddresses, bi *db.BlockInfo, bestheight uint32, addresses map[string]struct{}) *Tx {
 	var err error
 	var valInSat, valOutSat, feesSat big.Int
@@ -929,7 +986,12 @@ func (w *Worker) txFromTxAddress(txid string, ta *db.TxAddresses, bi *db.BlockIn
 		vin.ValueSat = (*Amount)(&tai.ValueSat)
 		valInSat.Add(&valInSat, &tai.ValueSat)
 		vin.Addresses, vin.IsAddress, err = tai.Addresses(w.chainParser)
-		vin.BcashToken = tai.BcashToken
+		if tai.BcashToken != nil {
+			vin.BcashToken, err = w.convertToApiBcashToken(tai.BcashToken)
+			if err != nil {
+				glog.Errorf("convertToApiBcashToken error %v, tx %v, input %v, tai %+v", err, txid, i, tai)
+			}
+		}
 		if err != nil {
 			glog.Errorf("tai.Addresses error %v, tx %v, input %v, tai %+v", err, txid, i, tai)
 		}
@@ -947,7 +1009,12 @@ func (w *Worker) txFromTxAddress(txid string, ta *db.TxAddresses, bi *db.BlockIn
 		vout.ValueSat = (*Amount)(&tao.ValueSat)
 		valOutSat.Add(&valOutSat, &tao.ValueSat)
 		vout.Addresses, vout.IsAddress, err = tao.Addresses(w.chainParser)
-		vout.BcashToken = tao.BcashToken
+		if tao.BcashToken != nil {
+			vout.BcashToken, err = w.convertToApiBcashToken(tao.BcashToken)
+			if err != nil {
+				glog.Errorf("convertToApiBcashToken error %v, tx %v, output %v, tao %+v", err, txid, i, tao)
+			}
+		}
 		if err != nil {
 			glog.Errorf("tai.Addresses error %v, tx %v, output %v, tao %+v", err, txid, i, tao)
 		}
@@ -1357,13 +1424,13 @@ func setIsOwnAddress(tx *Tx, address string) {
 	}
 }
 
-func (w *Worker) getBchTokenSummary(ba *db.AddrBalance, option AccountDetails) *Tokens {
+func (w *Worker) getBchTokenSummary(ba *db.AddrBalance, option AccountDetails) (*Tokens, error) {
 	if !w.is.IsBCH() {
-		return nil
+		return nil, nil
 	}
 
 	if ba == nil || len(ba.Utxos) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	tokensMap := make(map[string]*Token)
@@ -1377,13 +1444,21 @@ func (w *Worker) getBchTokenSummary(ba *db.AddrBalance, option AccountDetails) *
 		if !found {
 			t = &Token{
 				Category: hex.EncodeToString(u.BcashToken.Category),
-				// Name:      u.BcashToken.Name,
-				// Symbol:    u.BcashToken.Symbol,
-				// Decimals:  int(u.BcashToken.Decimals),
 				Type:     bchain.CashTokenStandard,
 				Standard: bchain.CashTokenStandard,
-				// BalanceSat:  (*Amount)(big.NewInt(0)),
-				// Commitments: make([]string, 0),
+			}
+
+			tokenMeta, err := w.db.GetBcashTokenMeta(u.BcashToken.Category)
+			if err != nil {
+				return nil, errors.Annotatef(err, "GetBcashTokenMeta %x", u.BcashToken.Category)
+			}
+			if tokenMeta != nil {
+				t.Name = tokenMeta.Name
+				t.Description = tokenMeta.Description
+				t.Symbol = tokenMeta.Symbol
+				t.Decimals = int(tokenMeta.Decimals)
+				t.Website = tokenMeta.Website
+				t.Icon = tokenMeta.Icon
 			}
 
 			if option >= AccountDetailsTokenBalances {
@@ -1397,17 +1472,41 @@ func (w *Worker) getBchTokenSummary(ba *db.AddrBalance, option AccountDetails) *
 		if option >= AccountDetailsTokenBalances {
 			t.BalanceSat = (*Amount)(new(big.Int).Add((*big.Int)(t.BalanceSat), (*big.Int)(&u.BcashToken.Amount)))
 			if u.BcashToken.Nft != nil {
-				t.Commitments = append(t.Commitments, hex.EncodeToString(u.BcashToken.Nft.Commitment))
+				hexCommitment := hex.EncodeToString(u.BcashToken.Nft.Commitment)
+				t.Commitments = append(t.Commitments, hexCommitment)
+
+				nft, err := w.db.GetBcashTokenNftMeta(u.BcashToken.Category, u.BcashToken.Nft.Commitment)
+				if err != nil {
+					return nil, err
+				}
+
+				if nft != nil {
+					if t.Nfts == nil {
+						t.Nfts = make(map[string]Nft, 0)
+					}
+					t.Nfts[hexCommitment] = *nft
+				}
 			}
 		}
 	}
 
 	if len(tokensMap) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	tokens := make(Tokens, 0, len(tokensMap))
-	for _, t := range tokensMap {
+
+	// Collect and sort the map keys (categories)
+	keys := make([]string, 0, len(tokensMap))
+	for k := range tokensMap {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		return keys[i] < keys[j]
+	})
+
+	for _, category := range keys {
+		t := tokensMap[category]
 		if len(t.Commitments) > 1 {
 			// sort by length and then alphabetically
 			sort.Slice(t.Commitments, func(i, j int) bool {
@@ -1420,7 +1519,7 @@ func (w *Worker) getBchTokenSummary(ba *db.AddrBalance, option AccountDetails) *
 		tokens = append(tokens, *t)
 	}
 
-	return &tokens
+	return &tokens, nil
 }
 
 // GetAddress computes address value and gets transactions for given address
@@ -1473,7 +1572,11 @@ func (w *Worker) GetAddress(address string, page int, txsOnPage int, option Acco
 			}
 
 			if option >= AccountDetailsTokenBalances {
-				tokens := w.getBchTokenSummary(ba, option)
+				tokens, err := w.getBchTokenSummary(ba, option)
+				if err != nil {
+					return nil, NewAPIError(err.Error(), true)
+				}
+
 				if tokens != nil {
 					ed.tokens = *tokens
 				}

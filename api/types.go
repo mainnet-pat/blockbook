@@ -134,6 +134,26 @@ func (a *Amount) AsInt64() int64 {
 	return (*big.Int)(a).Int64()
 }
 
+type BcashToken struct {
+	Category    string         `json:"category" ts_doc:"Identifier of the token, which is a 32-byte hash of its genesis transaction"`
+	Amount      Amount         `json:"amount" ts_doc:"Fungible token amount in base units"`
+	Name        string         `json:"name,omitempty" ts_doc:"Readable name of the token."`
+	Symbol      string         `json:"symbol,omitempty" ts_doc:"Symbol for the token (e.g., 'ETH', 'USDT')."`
+	Decimals    int            `json:"decimals,omitempty" ts_doc:"Number of decimals for this token."`
+	Description string         `json:"description,omitempty" ts_doc:"Description of the token, if available."`
+	Icon        string         `json:"icon,omitempty" ts_doc:"URL to an icon image for this token, if available."`
+	Website     string         `json:"website,omitempty" ts_doc:"URL to the token's official website, if available."`
+	Nft         *BcashTokenNft `json:"nft,omitempty" ts_doc:"Optional pointer to a BcashTokenNft object if the token also holds an NFT"`
+}
+
+type BcashTokenNft struct {
+	Capability  string `json:"capability" ts_doc:"Capability of the NFT, which can be 'none', 'mutable', or 'minting'"`
+	Commitment  string `json:"commitment" ts_doc:"Commitment of the NFT, hex encoded, maximum 40 bytes"`
+	Name        string `json:"name,omitempty"`
+	Description string `json:"description,omitempty"`
+	Icon        string `json:"icon,omitempty"`
+}
+
 // Vin contains information about single transaction input
 type Vin struct {
 	Txid       string                   `json:"txid,omitempty" ts_doc:"ID/hash of the originating transaction (where the UTXO comes from)."`
@@ -148,7 +168,7 @@ type Vin struct {
 	Hex        string                   `json:"hex,omitempty" ts_doc:"Raw script hex data for this input."`
 	Asm        string                   `json:"asm,omitempty" ts_doc:"Disassembled script for this input."`
 	Coinbase   string                   `json:"coinbase,omitempty" ts_doc:"Data for coinbase inputs (when mining)."`
-	BcashToken *bchain.BcashToken       `json:"tokenData,omitempty" ts_doc:"If this input spends a CashToken, this field contains the token details."`
+	BcashToken *BcashToken              `json:"tokenData,omitempty" ts_doc:"If this input spends a CashToken, this field contains the token details."`
 }
 
 // Vout contains information about single transaction output
@@ -166,7 +186,7 @@ type Vout struct {
 	IsAddress   bool                     `json:"isAddress" ts_doc:"Indicates whether this output is owned by valid address."`
 	IsOwn       bool                     `json:"isOwn,omitempty" ts_doc:"Indicates if this output belongs to the wallet in context."`
 	Type        string                   `json:"type,omitempty" ts_doc:"Output script type (e.g., 'P2PKH', 'P2SH')."`
-	BcashToken  *bchain.BcashToken       `json:"tokenData,omitempty" ts_doc:"If this output receives a CashToken, this field contains the token details."`
+	BcashToken  *BcashToken              `json:"tokenData,omitempty" ts_doc:"If this output receives a CashToken, this field contains the token details."`
 }
 
 // MultiTokenValue contains values for contracts with multiple token IDs
@@ -174,6 +194,8 @@ type MultiTokenValue struct {
 	Id    *Amount `json:"id,omitempty" ts_doc:"Token ID (for ERC1155)."`
 	Value *Amount `json:"value,omitempty" ts_doc:"Amount of that specific token ID."`
 }
+
+type Nft = db.BcashTokenNftMeta
 
 // Token contains info about tokens held by an address
 type Token struct {
@@ -196,6 +218,10 @@ type Token struct {
 	ContractIndex    string                   `json:"-"`
 	Category         string                   `json:"category,omitempty" ts_doc:"Identifier of the token, 32 bytes"`
 	Commitments      []string                 `json:"commitments,omitempty" ts_doc:"Array of hex-encoded token commitments, each up to 40 bytes"`
+	Description      string                   `json:"description,omitempty" ts_doc:"Description of the token, if available."`
+	Icon             string                   `json:"icon,omitempty" ts_doc:"URL to an icon image for this token, if available."`
+	Website          string                   `json:"website,omitempty" ts_doc:"URL to the token's official website, if available."`
+	Nfts             map[string]Nft           `json:"nfts,omitempty" ts_doc:"For NFT tokens, a mapping of token IDs to their metadata, serialized in key order."`
 }
 
 // Tokens is array of Token
@@ -303,7 +329,6 @@ type Tx struct {
 	TokenTransfers         []TokenTransfer   `json:"tokenTransfers,omitempty" ts_doc:"List of token transfers that occurred in this transaction."`
 	EthereumSpecific       *EthereumSpecific `json:"ethereumSpecific,omitempty" ts_doc:"Ethereum-like blockchain specific data (if applicable)."`
 	AddressAliases         AddressAliasesMap `json:"addressAliases,omitempty" ts_doc:"Aliases for addresses involved in this transaction."`
-	// BcashSpecific          *bchain.BcashSpecific `json:"bcashSpecific,omitempty" ts_doc:"BitcoinCash blockchain specific data (if applicable), contains the information about CashTokens."`
 }
 
 // FeeStats contains detailed block fee statistics

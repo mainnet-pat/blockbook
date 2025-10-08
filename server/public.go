@@ -427,9 +427,11 @@ type TemplateData struct {
 	Name                     string
 	Symbol                   string
 	Description              string
+	Decimals                 int
 	Commitments              []string
 	CategoryName             string
 	ImageURL                 string
+	Nfts                     map[string]api.Nft
 }
 
 func (s *PublicServer) parseTemplates() []*template.Template {
@@ -725,14 +727,14 @@ func tokenCategory2HueSaturation(category string) string {
 	return fmt.Sprintf("%d,%d%%", hueInt, saturationInt)
 }
 
-func (s *PublicServer) bcashToken(token *bchain.BcashToken) template.HTML {
+func (s *PublicServer) bcashToken(token *api.BcashToken) template.HTML {
 	var rv strings.Builder
 	if token != nil {
-		categoryHex := hex.EncodeToString(token.Category[:])
+		categoryHex := token.Category
 		hueSat := tokenCategory2HueSaturation(categoryHex)
 		tokenColor := "hsl(" + hueSat + ",40%)"
 
-		// outter div
+		// outer div
 		rv.WriteString(`<div class="token-info border-right" style="border-color: `)
 		rv.WriteString(tokenColor)
 		rv.WriteString(`;">`)
@@ -742,40 +744,51 @@ func (s *PublicServer) bcashToken(token *bchain.BcashToken) template.HTML {
 
 		hasAmount := token.Amount.AsInt64() != 0
 
-		rv.WriteString(`<div class="ellipsis copyable flex-1`)
-		rv.WriteString(`" cc="`)
-		rv.WriteString(categoryHex)
-		rv.WriteString(`" title="Token Category">`)
-		rv.WriteString(categoryHex)
-		rv.WriteString(`</div>`)
+		categoryName := categoryHex
+		if token.Name != "" {
+			categoryName = token.Name
+		}
+
+		rv.WriteString(fmt.Sprintf(`<div class="ellipsis copyable flex-1 cc="%s" title="Token Category"><a href="/token/%s">%s</a></div>`, categoryHex, categoryHex, categoryName))
 
 		rv.WriteString(`<div class="flex flex-1 w-half float-align-right justify-end" title="Token Amount">`)
 		if hasAmount {
-			rv.WriteString(token.Amount.String())
+			rv.WriteString(formatAmountWithDecimals(&token.Amount, int(token.Decimals)))
 		}
 		rv.WriteString(`</div>`)
 		rv.WriteString(`</div>`)
 
 		// token nft capability and commitment
 		if token.Nft != nil {
-			commitmentHex := hex.EncodeToString(token.Nft.Commitment)
+			commitmentHex := token.Nft.Commitment
 			rv.WriteString(`<div class="flex">`)
 
-			rv.WriteString(`<div class="flex-1" title="NFT Capability">`)
+			rv.WriteString(`<div class="flex align-center flex-1" title="NFT Capability">`)
 			if token.Nft.Capability != "none" {
 				rv.WriteString(string(token.Nft.Capability))
 			}
 			rv.WriteString(" nft")
 			rv.WriteString(`</div>`)
 
+			commitmentName := commitmentHex
+			if token.Nft.Name != "" {
+				commitmentName = token.Nft.Name
+			} else if commitmentHex == "" {
+				commitmentName = "(empty)"
+			}
+
+			tokenIconImg := ""
+			if token.Nft.Icon != "" {
+				tokenIconImg = fmt.Sprintf(`<img onerror="this.style.display='none'" src="%s" alt="Token Icon" width="32px" height="32px"> `, token.Nft.Icon)
+			}
+
 			rv.WriteString(`<div class="flex flex-1 w-half float-align-right justify-end copyable" cc="`)
 			rv.WriteString(commitmentHex)
 			rv.WriteString(`" title="NFT Commitment">`)
-			if commitmentHex != "" {
-				rv.WriteString(commitmentHex)
-			} else {
-				rv.WriteString("(empty)")
+			if tokenIconImg != "" {
+				rv.WriteString(tokenIconImg)
 			}
+			rv.WriteString(fmt.Sprintf(`<a href="/nft/%s/%s">%s</a>`, categoryHex, commitmentHex, commitmentName))
 			rv.WriteString(`</div>`)
 
 			rv.WriteString(`</div>`)
@@ -1053,10 +1066,35 @@ func (s *PublicServer) explorerNftDetail(w http.ResponseWriter, r *http.Request)
 		data := s.newTemplateData(r)
 		data.Commitment = tokenId
 		data.Category = contract
-		// data.CategoryName = "..."
-		// data.ImageURL = "..."
-		// data.Description = "..."
-		// data.Name = "..."
+
+		categoryBin, err := hex.DecodeString(data.Category)
+		if err != nil || len(categoryBin) != 32 {
+			return errorTpl, nil, api.NewAPIError("Invalid category", true)
+		}
+		commitmentBin, err := hex.DecodeString(data.Commitment)
+		if err != nil {
+			return errorTpl, nil, api.NewAPIError("Invalid commitment", true)
+		}
+
+		tokenMeta, err := s.db.GetBcashTokenMeta(categoryBin)
+		if err != nil {
+			return errorTpl, nil, api.NewAPIError(err.Error(), true)
+		}
+
+		if tokenMeta != nil {
+			data.CategoryName = tokenMeta.Name
+
+			nftMeta, err := s.db.GetBcashTokenNftMeta(categoryBin, commitmentBin)
+			if err != nil {
+				return errorTpl, nil, api.NewAPIError(err.Error(), true)
+			}
+
+			if nftMeta != nil {
+				data.Name = nftMeta.Name
+				data.Description = nftMeta.Description
+				data.ImageURL = nftMeta.Icon
+			}
+		}
 		return bcashNftDetailTpl, data, nil
 	}
 
@@ -1097,9 +1135,33 @@ func (s *PublicServer) explorerBcashToken(w http.ResponseWriter, r *http.Request
 			commitments[i] = hex.EncodeToString(c)
 		}
 		data.Commitments = commitments
-		// data.Name = "..."
-		// data.Symbol = "..."
-		// data.Description = "..."
+
+		tokenMeta, err := s.db.GetBcashTokenMeta(binCategory)
+		if err != nil {
+			return errorTpl, nil, api.NewAPIError(err.Error(), true)
+		}
+		if tokenMeta != nil {
+			data.Name = tokenMeta.Name
+			data.Description = tokenMeta.Description
+			data.Symbol = tokenMeta.Symbol
+			data.Decimals = int(tokenMeta.Decimals)
+			data.URI = tokenMeta.Website
+			data.ImageURL = tokenMeta.Icon
+		}
+
+		for _, c := range tokenInfo.Commitments {
+			nft, err := s.db.GetBcashTokenNftMeta(binCategory, c)
+			if err != nil {
+				return errorTpl, nil, api.NewAPIError(err.Error(), true)
+			}
+
+			if nft != nil {
+				if data.Nfts == nil {
+					data.Nfts = make(map[string]api.Nft, 0)
+				}
+				data.Nfts[hex.EncodeToString(c)] = *nft
+			}
+		}
 	}
 
 	return bcashTokenTpl, data, nil
