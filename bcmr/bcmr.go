@@ -114,6 +114,13 @@ func (bd *BcmrDownloader) processMetaQueue(metaQueue []*db.BcashTokenMetaQueue) 
 			glog.Infof("Processing meta: %s:%d", hex.EncodeToString(meta.TxId), meta.Vout)
 			registry, err := bd.getRegistry(fmt.Sprintf("%s/api/registries/%s:%d/", bd.provider, hex.EncodeToString(meta.TxId), meta.Vout))
 			if err != nil {
+				// Remove from queue if error includes 'cannot unmarshal'
+				if strings.Contains(err.Error(), "cannot unmarshal") {
+					glog.Errorf("Cannot unmarshal registry for %s:%d, removing from queue", hex.EncodeToString(meta.TxId), meta.Vout)
+					deleted = append(deleted, meta)
+					continue
+				}
+
 				glog.Errorf("Error downloading BCMR registry %s:%d: %+v", hex.EncodeToString(meta.TxId), meta.Vout, err)
 				meta.Retries += 1
 				if meta.Retries > MAX_RETRIES {
