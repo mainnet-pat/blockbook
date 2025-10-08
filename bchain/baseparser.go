@@ -6,6 +6,7 @@ import (
 	"math/big"
 	"strings"
 
+	"github.com/golang/glog"
 	"github.com/juju/errors"
 	"github.com/trezor/blockbook/common"
 	"google.golang.org/protobuf/proto"
@@ -30,11 +31,11 @@ func (p *BaseParser) ParseTx(b []byte) (*Tx, error) {
 
 // GetAddrDescForUnknownInput returns nil AddressDescriptor
 func (p *BaseParser) GetAddrDescForUnknownInput(tx *Tx, input int) AddressDescriptor {
-	// var iTxid string
-	// if len(tx.Vin) > input {
-	// 	iTxid = tx.Vin[input].Txid
-	// }
-	// glog.Warningf("tx %v, input tx %v not found in txAddresses", tx.Txid, iTxid)
+	var iTxid string
+	if len(tx.Vin) > input {
+		iTxid = tx.Vin[input].Txid
+	}
+	glog.Warningf("tx %v, input tx %v not found in txAddresses", tx.Txid, iTxid)
 	return nil
 }
 
