@@ -252,8 +252,8 @@ func UnpackTokenData(buf []byte) (*bchain.BcashToken, int, error) {
 	}
 
 	// Check minimum length
-	if br.Size() < 34 {
-		return nil, 0, fmt.Errorf("Invalid token prefix: insufficient length. The minimum possible length is 34. Missing bytes: %d", 34-br.Size())
+	if br.Len() < 33 {
+		return nil, 0, fmt.Errorf("Invalid token prefix: insufficient length. The minimum possible length is 34. Missing bytes: %d", 33-br.Len())
 	}
 
 	token := &bchain.BcashToken{}

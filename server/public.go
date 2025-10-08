@@ -693,12 +693,17 @@ func (s *PublicServer) summaryValuesSpan(baseValue float64, secondaryValue float
 /**
  * Given a 32-byte hex-encoded token category, return a deterministic hue and
  * saturation value to use in HSL colors representing the token category.
- * Usage: `hsl(${ tokenCategory2HueSaturation(vout.tokenData.category) }, 50%)`
+ * Usage: `hsl({{ tokenCategory2HueSaturation .Vout.TokenData.Category }}, 50%)`
  */
 // see original implementation: https://github.com/sickpig/bch-rpc-explorer/blob/85aed82dcae5b22050f26184bde229fe60a958b9/app/utils.js#L812
 func tokenCategory2HueSaturation(category string) string {
 	// Decode hex string to bytes
-	bin, _ := hex.DecodeString(category)
+	bin, err := hex.DecodeString(category)
+	if err != nil || len(bin) != 32 {
+		glog.Warningf("tokenCategory2HueSaturation: invalid category: %s", category)
+		// return gray color for invalid category
+		return "0,0%,50%"
+	}
 	raw := big.NewFloat(1)
 	tmp := new(big.Float)
 	for _, b := range bin {
@@ -794,7 +799,7 @@ func (s *PublicServer) bcashToken(token *api.BcashToken) template.HTML {
 			rv.WriteString(`</div>`)
 
 		}
-		// outter div end
+		// outer div end
 		rv.WriteString(`</div>`)
 	}
 	return template.HTML(rv.String())

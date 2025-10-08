@@ -29,7 +29,7 @@ type BcmrDownloader struct {
 var DefaultBcmrProvider = "https://bcmr.paytaca.com"
 var MAX_RETRIES = uint8(144) // 24 hours with 10 min interval
 
-// NewFiatRates initializes the FiatRates handler
+// NewBcmrDownloader initializes the BcmrDownloader, which handles downloading and storing BCMR token metadata, and also retries failed downloads
 func NewBcmrDownloader(d *db.RocksDB, config *common.Config, metrics *common.Metrics) (*BcmrDownloader, error) {
 	var bd = &BcmrDownloader{
 		periodSeconds: 10 * 60, // 10 minutes
