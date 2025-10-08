@@ -133,8 +133,9 @@ func (bd *BcmrDownloader) processMetaQueue(metaQueue []*db.BcashTokenMetaQueue) 
 
 			for categoryHex, identity := range *registry.Identities {
 				categoryBytes, err := hex.DecodeString(categoryHex)
-				if err != nil {
+				if err != nil || categoryBytes == nil || len(categoryBytes) != 32 {
 					glog.Errorf("Error decoding category hex %s: %+v", categoryHex, err)
+					deleted = append(deleted, meta)
 					continue
 				}
 
@@ -153,6 +154,7 @@ func (bd *BcmrDownloader) processMetaQueue(metaQueue []*db.BcashTokenMetaQueue) 
 
 				if len(identity) == 0 {
 					glog.Infof("No identity snapshots found for category %s, skipping", categoryHex)
+					deleted = append(deleted, meta)
 					continue
 				}
 
