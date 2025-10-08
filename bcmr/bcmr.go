@@ -212,13 +212,15 @@ func (bd *BcmrDownloader) processMetaQueue(metaQueue []*db.BcashTokenMetaQueue) 
 								bcashNftMeta.Description = *nftType.Description
 							}
 
-							for _, key := range []string{"icon", "image"} {
-								if url := (*nftType.Uris)[key]; url != "" {
-									if strings.HasPrefix(url, "ipfs://") {
-										url = "https://ipfs.io/ipfs/" + url[len("ipfs://"):]
+							if nftType.Uris != nil && len(*nftType.Uris) > 0 {
+								for _, key := range []string{"icon", "image"} {
+									if url := (*nftType.Uris)[key]; url != "" {
+										if strings.HasPrefix(url, "ipfs://") {
+											url = "https://ipfs.io/ipfs/" + url[len("ipfs://"):]
+										}
+										bcashNftMeta.Icon = url
+										break
 									}
-									bcashNftMeta.Icon = url
-									break
 								}
 							}
 

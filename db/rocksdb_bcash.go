@@ -280,7 +280,6 @@ func (d *RocksDB) processBcashTokens(block *bchain.Block, addresses addressesMap
 	if !d.is.IsBCH() || block.Height <= 792772 {
 		return nil
 	}
-	println(block.Height)
 
 	// process bcash token data
 	genesisSupplyMap := make(map[string]uint64)
